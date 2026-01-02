@@ -18,7 +18,8 @@
     "luaLibImport": "inline",
     "luaBundle": "main.lua",
     "luaBundleEntry": "main.ts",
-    "noImplicitSelf": true
+    "noImplicitSelf": true,
+    "noTypescriptCheck": true
   },
   "include": [
     "./**/*.ts"
