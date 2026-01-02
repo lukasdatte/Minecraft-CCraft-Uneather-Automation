@@ -1,6 +1,21 @@
 # Material Processing System
 
-Dieses Dokument beschreibt das automatische Materialverarbeitungssystem für die CC:Tweaked-basierte Unearther Distribution.
+Dieses Dokument beschreibt das automatische Materialverarbeitungssystem (Hammer-Chain) für die Basismaterial-Produktion.
+
+> **Hinweis:** Für allgemeine Systemarchitektur, Hardware-Setup, Boot-Sequenz und Logging siehe [system.md](./system.md).
+
+## Inhaltsverzeichnis
+
+- [Kontext & Hintergrund](#kontext--hintergrund)
+- [Design-Entscheidung](#design-entscheidung)
+- [Materialverarbeitungskette](#materialverarbeitungskette)
+- [Hardware-Erweiterung](#hardware-erweiterung)
+- [Konfiguration](#konfiguration)
+- [Verarbeitungslogik](#verarbeitungslogik)
+- [Edge Cases](#edge-cases)
+- [Integration](#integration)
+
+---
 
 ## Kontext & Hintergrund
 
@@ -16,17 +31,23 @@ Mit Hammer-Blöcken (z.B. aus Ex Nihilo oder Outdoor Hammers Mod) können Materi
 - Nach Verarbeitung (Redstone-Signal oder automatisch) entsteht das Output-Material
 - Pipes oder Hopper transportieren das Ergebnis zurück ins Lager
 
-### Ziel des Systems
+### Ziel
 
 Das System automatisiert die Produktion von Basismaterialien, sodass immer ein gewisser Vorrat vorhanden ist, ohne manuelles Eingreifen.
 
-### Design-Entscheidung: Eine Verarbeitungskette
+---
 
-Das System verwendet **eine gemeinsame Verarbeitungskette** mit einem Processing Chest für alle Materialien. Dies wurde gewählt für:
+## Design-Entscheidung
 
-- **Einfachheit:** Eine Konfiguration, ein Inventar
-- **Flexibilität:** Verschiedene Materialien können gleichzeitig verarbeitet werden
-- **Wartbarkeit:** Weniger Peripherals zu konfigurieren
+### Eine gemeinsame Verarbeitungskette
+
+Das System verwendet **eine gemeinsame Verarbeitungskette** mit einem Processing Chest für alle Materialien:
+
+| Vorteil | Beschreibung |
+|---------|--------------|
+| **Einfachheit** | Eine Konfiguration, ein Inventar |
+| **Flexibilität** | Verschiedene Materialien können gleichzeitig verarbeitet werden |
+| **Wartbarkeit** | Weniger Peripherals zu konfigurieren |
 
 **Alternative (nicht implementiert):** Separate Ketten mit jeweils eigenem Processing Chest für z.B. Netherrack-basierte Verarbeitung.
 
@@ -54,38 +75,19 @@ Diese Materialien können in eigenen Ketten oder als Endprodukte konfiguriert we
 
 ---
 
-## Hardware-Setup (Minecraft)
+## Hardware-Erweiterung
 
-### Komponenten
+Zusätzlich zum Standard-Setup (siehe [system.md](./system.md)) benötigt das Processing-System:
+
+### Zusätzliche Komponenten
 
 | Komponente | Beschreibung |
 |------------|--------------|
-| **CC:Tweaked Computer** | Zentraler Controller (kein Turtle!) |
-| **Wired Modem** | Am Computer angeschlossen, verbindet mit Netzwerk |
-| **Netzwerkkabel** | Verbindet alle Peripheriegeräte |
-| **Basisinventar** | Drawer Controller oder große Truhe (zentrales Lager) |
 | **Processing Chest** | Truhe als Input für das Pipe-System |
 | **Pipes/Hopper** | Transportieren Material zu Hämmern und zurück |
 | **Hämmer** | Verarbeiten die Materialien |
 
-### Netzwerk-Topologie
-
-```
-[Computer]
-    |
-[Wired Modem] ─────┬─────────────────┬──────────────────┐
-                   |                 |                  |
-            [Basisinventar]   [Processing Chest]   [Weitere...]
-         (Drawer Controller)      (Chest)
-```
-
-Alle Inventare sind über Wired Modems mit dem Netzwerk verbunden und können vom Computer per Name angesprochen werden.
-
----
-
-## Inventar-Flow
-
-### Übersicht
+### Inventar-Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -136,7 +138,7 @@ Alle Inventare sind über Wired Modems mit dem Netzwerk verbunden und können vo
 
 ---
 
-## Konfiguration im Code
+## Konfiguration
 
 ### Globale Konstante
 
@@ -147,26 +149,24 @@ const STACK_SIZE = 64;  // Standard Minecraft Stack-Größe
 ### Processing-Konfiguration
 
 ```typescript
-import { STACK_SIZE } from "./types";  // STACK_SIZE = 64
-
 processing: {
-  enabled: true,
+    enabled: true,
 
-  // Mindestmenge in Items, die IMMER im Lager bleiben muss
-  // Beispiel: 2 * STACK_SIZE = 128 Items werden nie unterschritten
-  minInputReserve: 2 * STACK_SIZE,
+    // Mindestmenge in Items, die IMMER im Lager bleiben muss
+    // Beispiel: 2 * STACK_SIZE = 128 Items werden nie unterschritten
+    minInputReserve: 2 * STACK_SIZE,
 
-  // Maximale Menge in Items, ab der keine Produktion mehr stattfindet
-  // Beispiel: 4 * STACK_SIZE = 256 Items stoppt die Produktion
-  maxOutputStock: 4 * STACK_SIZE,
+    // Maximale Menge in Items, ab der keine Produktion mehr stattfindet
+    // Beispiel: 4 * STACK_SIZE = 256 Items stoppt die Produktion
+    maxOutputStock: 4 * STACK_SIZE,
 
-  // Verarbeitungskette: Input → Output
-  chain: {
-    "minecraft:cobblestone": "minecraft:dirt",
-    "minecraft:dirt": "minecraft:gravel",
-    "minecraft:gravel": "minecraft:sand",
-    "minecraft:sand": "exnihilo:dust",
-  },
+    // Verarbeitungskette: Input → Output
+    chain: {
+        "minecraft:cobblestone": "minecraft:dirt",
+        "minecraft:dirt": "minecraft:gravel",
+        "minecraft:gravel": "minecraft:sand",
+        "minecraft:sand": "exnihilo:dust",
+    },
 }
 ```
 
@@ -174,20 +174,20 @@ processing: {
 
 ```typescript
 peripherals: {
-  // ... andere Peripherals ...
+    // ... andere Peripherals ...
 
-  processingChest: {
-    name: "minecraft:chest_10",  // Name im Wired Network
-    type: "chest",
-  },
+    processingChest: {
+        name: "minecraft:chest_10",  // Name im Wired Network
+        type: "chest",
+    },
 }
 ```
 
 ---
 
-## Verarbeitungslogik (Algorithmus)
+## Verarbeitungslogik
 
-### Hauptalgorithmus
+### Algorithmus
 
 ```
 FÜR JEDES (inputItem → outputItem) IN chain:
@@ -196,9 +196,9 @@ FÜR JEDES (inputItem → outputItem) IN chain:
        WENN NEIN → Überspringe restliche Kette (break)
 
     2. LESE Schwellwerte aus Config:
-       - minInputReserve (bereits in Items, z.B. 2 * STACK_SIZE = 128)
-       - maxOutputStock (bereits in Items, z.B. 4 * STACK_SIZE = 256)
-       - benötigt = minInputReserve + STACK_SIZE (Reserve + 1 Stack zum Transferieren)
+       - minInputReserve (z.B. 2 * STACK_SIZE = 128)
+       - maxOutputStock (z.B. 4 * STACK_SIZE = 256)
+       - benötigt = minInputReserve + STACK_SIZE
 
     3. PRÜFE: inputMenge >= benötigt?
        WENN NEIN → Überspringe dieses Material (continue)
@@ -224,7 +224,7 @@ FÜR JEDES (inputItem → outputItem) IN chain:
 ENDE FÜR
 ```
 
-### Schwellwert-Berechnung (Beispiel)
+### Schwellwert-Berechnung
 
 ```
 Konfiguration:
@@ -245,28 +245,56 @@ Beispiel Cobblestone → Dirt:
   → Transfer von 64 Cobblestone zur Processing Chest
 ```
 
+### Warum minInputReserve + STACK_SIZE?
+
+Die Berechnung `benötigt = minInputReserve + STACK_SIZE` stellt sicher, dass:
+1. **Nach** dem Transfer noch mindestens `minInputReserve` Items übrig sind
+2. Wir immer einen **kompletten Stack** transferieren können
+
+### Platzverfügbarkeitsprüfung
+
+Bevor ein Material verarbeitet wird, prüft das System ob die Processing Chest Platz hat:
+
+```typescript
+function hasAvailableSpace(processingChest: InventoryPeripheral): boolean {
+    const size = processingChest.size();      // Gesamtanzahl Slots
+    const items = processingChest.list();     // Aktuelle Belegung
+
+    // Zähle belegte Slots
+    let occupied = 0;
+    for (const [, item] of pairs(items)) {
+        if (item && item.count > 0) {
+            occupied++;
+        }
+    }
+
+    return occupied < size;  // true wenn mind. 1 Slot frei
+}
+```
+
+**Wichtig:** Die Prüfung erfolgt **vor jedem Material** in der Kette. Sobald die Chest voll ist, wird die **gesamte restliche Kette übersprungen** (`break`), nicht nur das aktuelle Material.
+
 ---
 
-## Edge Cases & Fehlerbehandlung
+## Edge Cases
 
 ### Processing Chest ist voll
 
 **Situation:** Die Processing Chest hat keine freien Slots mehr.
 
 **Handling:**
-- Restliche Kette wird übersprungen
+- Restliche Kette wird übersprungen (`break`)
 - Im nächsten Loop-Durchlauf wird erneut geprüft
 - Log-Meldung (Debug-Level): "Processing chest full, skipping remaining chain"
 
 ### Mehrere Materialien gleichzeitig
 
-**Situation:** Die Processing Chest enthält bereits andere Materialien (z.B. Gravel während Cobblestone hinzugefügt wird).
+**Situation:** Die Processing Chest enthält bereits andere Materialien.
 
 **Handling:**
 - **Erlaubt:** Processing Chest kann verschiedene Materialien gleichzeitig enthalten
 - Jedes Material wird unabhängig verarbeitet
 - Pipes/Hopper verteilen automatisch auf die richtigen Hämmer
-- Die Chest darf komplett gefüllt werden (alle Slots belegt)
 - Erst wenn alle Slots voll sind, wird die Verarbeitung pausiert
 
 ### Nicht genug Input-Material
@@ -274,7 +302,7 @@ Beispiel Cobblestone → Dirt:
 **Situation:** Cobblestone ist unter dem Minimum (z.B. nur 100 statt 192).
 
 **Handling:**
-- Dieses Material wird übersprungen
+- Dieses Material wird übersprungen (`continue`)
 - Andere Materialien in der Kette werden weiter geprüft
 - Kein Fehler, normaler Betrieb
 
@@ -289,7 +317,7 @@ Beispiel Cobblestone → Dirt:
 
 ### Race Condition (Slot geändert)
 
-**Situation:** Zwischen Prüfung und Transfer wurde der Slot-Inhalt geändert (z.B. durch anderes System).
+**Situation:** Zwischen Prüfung und Transfer wurde der Slot-Inhalt geändert.
 
 **Handling:**
 - Transfer wird abgebrochen
@@ -298,7 +326,7 @@ Beispiel Cobblestone → Dirt:
 
 ### Netzwerk-Fehler
 
-**Situation:** Processing Chest ist nicht erreichbar (offline, Kabel getrennt).
+**Situation:** Processing Chest ist nicht erreichbar.
 
 **Handling:**
 - Fehlercode: `ERR_PROCESSING_CHEST_MISSING`
@@ -308,7 +336,7 @@ Beispiel Cobblestone → Dirt:
 
 ---
 
-## Integration mit Distributor
+## Integration
 
 ### Position im Main-Loop
 
@@ -318,7 +346,7 @@ Main Loop:
 │ Phase 1: Scan Unearthers                │
 │ Phase 2: Get Inventory Contents         │
 │ ─────────────────────────────────────── │
-│ Phase 2.5: MATERIAL PROCESSING ◄─ NEU   │
+│ Phase 2.5: MATERIAL PROCESSING ◄── HIER │
 │ ─────────────────────────────────────── │
 │ Phase 3: Process Empty Unearthers       │
 │ Phase 4: Update State                   │
@@ -336,27 +364,18 @@ Main Loop:
 
 Processing und Distribution laufen **sequenziell** im gleichen Loop, nicht parallel. Dies verhindert Race Conditions beim Inventory-Zugriff.
 
----
+### Inventory-Re-Scan
 
-## Logging
+Nach erfolgreichen Processing-Transfers wird das Inventar **neu gescannt**, bevor die Distribution-Phase beginnt:
 
-### Log-Level
-
-| Level | Beschreibung |
-|-------|-------------|
-| `debug` | Alle Details (Slot-Nummern, Mengen, etc.) |
-| `info` | Erfolgreiche Transfers, Zusammenfassungen |
-| `warn` | Nicht-kritische Probleme (Chest voll, etc.) |
-| `error` | Kritische Fehler (Peripheral offline, etc.) |
-
-### Beispiel-Ausgaben
-
-```
-[DEBUG] Processing phase starting...
-[DEBUG] Checking cobblestone → dirt: have 250, need 192
-[INFO]  Processing transfer: 64 cobblestone → processing chest
-[DEBUG] Checking dirt → gravel: have 100, need 192 - skipping (insufficient)
-[DEBUG] Processing phase complete: 1 transfer
+```typescript
+if (processingRes.ok && processingRes.value.length > 0) {
+    // Re-scan inventory after processing
+    const updatedContentsRes = getInventoryContents(peripherals.materialSource);
+    if (updatedContentsRes.ok) {
+        inventoryContents = updatedContentsRes.value;
+    }
+}
 ```
 
 ---
@@ -367,12 +386,12 @@ Processing und Distribution laufen **sequenziell** im gleichen Loop, nicht paral
 
 ```typescript
 processing: {
-  enabled: true,
-  minInputReserve: 1 * STACK_SIZE,  // 64 Items Reserve
-  maxOutputStock: 2 * STACK_SIZE,   // Max 128 Items
-  chain: {
-    "minecraft:cobblestone": "minecraft:gravel",
-  },
+    enabled: true,
+    minInputReserve: 1 * STACK_SIZE,  // 64 Items Reserve
+    maxOutputStock: 2 * STACK_SIZE,   // Max 128 Items
+    chain: {
+        "minecraft:cobblestone": "minecraft:gravel",
+    },
 }
 ```
 
@@ -380,28 +399,28 @@ processing: {
 
 ```typescript
 processing: {
-  enabled: true,
-  minInputReserve: 2 * STACK_SIZE,   // 128 Items Reserve
-  maxOutputStock: 4 * STACK_SIZE,    // Max 256 Items
-  chain: {
-    "minecraft:cobblestone": "minecraft:dirt",
-    "minecraft:dirt": "minecraft:gravel",
-    "minecraft:gravel": "minecraft:sand",
-    "minecraft:sand": "exnihilo:dust",
-  },
+    enabled: true,
+    minInputReserve: 2 * STACK_SIZE,   // 128 Items Reserve
+    maxOutputStock: 4 * STACK_SIZE,    // Max 256 Items
+    chain: {
+        "minecraft:cobblestone": "minecraft:dirt",
+        "minecraft:dirt": "minecraft:gravel",
+        "minecraft:gravel": "minecraft:sand",
+        "minecraft:sand": "exnihilo:dust",
+    },
 }
 ```
 
-### Benutzerdefinierte Mengen
+### Große Lagerbestände
 
 ```typescript
 processing: {
-  enabled: true,
-  minInputReserve: 3 * STACK_SIZE,   // 192 Items Reserve
-  maxOutputStock: 10 * STACK_SIZE,   // Max 640 Items
-  chain: {
-    "minecraft:cobblestone": "minecraft:dirt",
-  },
+    enabled: true,
+    minInputReserve: 3 * STACK_SIZE,   // 192 Items Reserve
+    maxOutputStock: 10 * STACK_SIZE,   // Max 640 Items
+    chain: {
+        "minecraft:cobblestone": "minecraft:dirt",
+    },
 }
 ```
 
@@ -409,9 +428,16 @@ processing: {
 
 ```typescript
 processing: {
-  enabled: false,
-  minInputReserve: 0,
-  maxOutputStock: 0,
-  chain: {},
+    enabled: false,
+    minInputReserve: 0,
+    maxOutputStock: 0,
+    chain: {},
 }
 ```
+
+---
+
+## Verwandte Dokumentation
+
+- **Systemarchitektur:** [system.md](./system.md)
+- **Unearther Distribution:** [unearther-distribution.md](./unearther-distribution.md)
