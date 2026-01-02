@@ -1,5 +1,6 @@
 import { CONFIG } from "./config";
 import { log, initLogger } from "./core/logger";
+import { printStartupDiagnostics } from "./core/diagnostics";
 import { validatePeripherals, ValidatedPeripherals } from "./registry/peripheral";
 import { scanAllUnearthers, getInventoryContents } from "./engine/scanner";
 import { createScheduler, WeightedScheduler } from "./engine/scheduler";
@@ -66,6 +67,9 @@ function main(): void {
     print("  Unearther Distribution System v2.0");
     print("==============================================");
     print("");
+
+    // Show startup diagnostics
+    printStartupDiagnostics(CONFIG);
 
     // Validate critical config values
     if (CONFIG.system.scanIntervalSeconds <= 0) {

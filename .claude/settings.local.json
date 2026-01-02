@@ -12,7 +12,8 @@
       "Bash(where:*)",
       "Bash(dir \"%USERPROFILE%\\\\.claude\" /b)",
       "Bash(npm run build:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git log:*)"
     ]
   }
 }
