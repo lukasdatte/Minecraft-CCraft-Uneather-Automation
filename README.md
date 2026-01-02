@@ -18,7 +18,7 @@ The executor will *visit* stations that are empty and record results, but will n
 npm install
 npm run build
 ```
-This produces `main.lua` in the project root.
+This produces `dist/main.lua`.
 
 ## Configure
 Edit `src/config.ts`.

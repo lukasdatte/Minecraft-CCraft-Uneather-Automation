@@ -2,7 +2,7 @@
   "name": "unearther-distributor-ts2lua",
   "version": "0.2.0",
   "description": "CC:Tweaked Turtle distributor (infrastructure-complete, item-logic stubbed).",
-  "main": "main.ts",
+  "main": "src/main.ts",
   "scripts": {
     "prebuild": "npm run lint:fix",
     "build": "npx tstl",

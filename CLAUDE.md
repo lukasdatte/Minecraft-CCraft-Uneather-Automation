@@ -15,12 +15,12 @@ npm run lint        # Typecheck + ESLint
 npm run lint:fix    # Typecheck + ESLint with auto-fix
 ```
 
-Output: `main.lua` in project root (bundled entry point for CC:Tweaked).
+Output: `dist/main.lua` (bundled entry point for CC:Tweaked).
 
 ## Architecture
 
 ### Entry Point
-- `main.ts` - Boot sequence, main loop (scan → queue → execute → persist)
+- `src/main.ts` - Boot sequence, main loop (scan → queue → execute → persist)
 
 ### Configuration (`src/`)
 - `config.ts` - Runtime configuration (dock, stations, world, refuel settings)

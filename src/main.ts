@@ -1,13 +1,13 @@
-import { CONFIG } from "./src/config";
-import { log } from "./src/core/logger";
-import { State } from "./src/core/state";
-import { ensureDockReady, ensureFuelOk } from "./src/core/checks";
-import { buildDirectory, printRemoteIfEnabled } from "./src/net/registry";
-import { Scanner } from "./src/engine/scanner";
-import { Queue } from "./src/engine/queue";
-import { Executor } from "./src/engine/executor";
-import { NavLine } from "./src/world/nav_line";
-import { Storage } from "./src/core/storage";
+import { CONFIG } from "./config";
+import { log } from "./core/logger";
+import { State } from "./core/state";
+import { ensureDockReady, ensureFuelOk } from "./core/checks";
+import { buildDirectory, printRemoteIfEnabled } from "./net/registry";
+import { Scanner } from "./engine/scanner";
+import { Queue } from "./engine/queue";
+import { Executor } from "./engine/executor";
+import { NavLine } from "./world/nav_line";
+import { Storage } from "./core/storage";
 
 function main() {
   const state = new State(CONFIG);

@@ -16,12 +16,11 @@
   "tstl": {
     "luaTarget": "CC-5.2",
     "luaLibImport": "inline",
-    "luaBundle": "main.lua",
-    "luaBundleEntry": "main.ts",
-    "noImplicitSelf": true,
-    "noTypescriptCheck": true
+    "luaBundle": "dist/main.lua",
+    "luaBundleEntry": "src/main.ts",
+    "noImplicitSelf": true
   },
   "include": [
-    "./**/*.ts"
+    "src/**/*.ts"
   ]
 }
