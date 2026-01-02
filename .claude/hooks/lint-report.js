@@ -4,6 +4,19 @@
 const { execSync } = require("child_process");
 const path = require("path");
 
+// Read stdin to check if this is a recursive stop hook
+let input = "";
+try {
+  input = require("fs").readFileSync(0, "utf8");
+  const data = JSON.parse(input);
+  if (data.stop_hook_active) {
+    // Skip if Claude is already responding to a previous stop hook error
+    process.exit(0);
+  }
+} catch {
+  // No stdin or invalid JSON - continue normally
+}
+
 const projectDir = process.env.CLAUDE_PROJECT_DIR || path.resolve(__dirname, "../..");
 
 function parseOutput(output) {

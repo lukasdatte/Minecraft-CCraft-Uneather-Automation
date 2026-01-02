@@ -1,97 +1,187 @@
 import { CONFIG } from "./config";
-import { log } from "./core/logger";
-import { State } from "./core/state";
-import { ensureDockReady, ensureFuelOk } from "./core/checks";
-import { buildDirectory, printRemoteIfEnabled } from "./net/registry";
-import { Scanner } from "./engine/scanner";
-import { Queue } from "./engine/queue";
-import { Executor } from "./engine/executor";
-import { NavLine } from "./world/nav_line";
-import { Storage } from "./core/storage";
+import { log, initLogger } from "./core/logger";
+import { validatePeripherals, ValidatedPeripherals } from "./registry/peripheral";
+import { scanAllUnearthers, getInventoryContents } from "./engine/scanner";
+import { createScheduler, WeightedScheduler } from "./engine/scheduler";
+import { processEmptyUnearthers, TransferResult } from "./engine/transfer";
+import { AppState } from "./types";
 
-function main() {
-  const state = new State(CONFIG);
-  const storage = new Storage(CONFIG);
+/**
+ * Initialize application state.
+ */
+function createInitialState(): AppState {
+  const uneartherStatus: AppState["uneartherStatus"] = {};
 
-  log.info("Boot", { version: "0.2-infra-complete" });
+  for (const [id] of Object.entries(CONFIG.unearthers)) {
+    uneartherStatus[id] = {
+      id,
+      isEmpty: false,
+    };
+  }
 
-  // 0) Optional: rehydrate runtime state
-  storage.tryLoad(state);
+  return {
+    uneartherStatus,
+    totalTransfers: 0,
+    lastScanTime: 0,
+    warnings: [],
+  };
+}
 
-  // 1) Dock orientieren & prüfen
-  const dockRes = ensureDockReady(CONFIG);
-  if (!dockRes.ok) {
-    log.error("Dock not ready", dockRes);
+/**
+ * Update state after transfers.
+ */
+function updateState(
+  state: AppState,
+  transfers: TransferResult[]
+): void {
+  for (const transfer of transfers) {
+    const status = state.uneartherStatus[transfer.unearther.id];
+    if (status) {
+      status.isEmpty = false;
+      status.lastMaterial = transfer.materialId;
+      status.lastTransferTime = os.epoch("utc");
+    }
+    state.totalTransfers++;
+  }
+  state.lastScanTime = os.epoch("utc");
+}
+
+/**
+ * Main application entry point.
+ */
+function main(): void {
+  print("==============================================");
+  print("  Unearther Distribution System v2.0");
+  print("==============================================");
+  print("");
+
+  // Validate critical config values
+  if (CONFIG.system.scanIntervalSeconds <= 0) {
+    print("ERROR: scanIntervalSeconds must be > 0");
     return;
   }
 
-  // 2) Config-first Registry/Directory bauen & validieren
-  const dirRes = buildDirectory(CONFIG);
-  if (!dirRes.ok) {
-    log.error("Registry invalid", dirRes);
+  // Initialize logger (without monitor for now)
+  initLogger(CONFIG.system.logLevel);
+
+  log.info("Boot sequence starting...");
+
+  // 1. Validate all peripherals
+  log.info("Phase 1: Validating peripherals...");
+  const peripheralsRes = validatePeripherals(CONFIG);
+  if (!peripheralsRes.ok) {
+    log.error("Failed to validate peripherals", {
+      code: peripheralsRes.code,
+    });
+    log.error("Please check your configuration and wired network.");
     return;
   }
-  const dir = dirRes.value;
+  const peripherals: ValidatedPeripherals = peripheralsRes.value;
+  log.info("Peripherals validated successfully");
 
-  printRemoteIfEnabled(CONFIG, dir);
+  // 2. Initialize logger with monitor if available
+  if (peripherals.monitor) {
+    initLogger(CONFIG.system.logLevel, peripherals.monitor);
+    log.info("Monitor connected");
+  }
 
-  log.info("Registry OK", {
-    stations: dir.stations.length,
-    controllers: dir.baseControllers.length,
+  // 3. Create scheduler
+  const scheduler: WeightedScheduler = createScheduler(CONFIG);
+  log.info("Scheduler initialized");
+
+  // 4. Create initial state
+  const state = createInitialState();
+  log.info("State initialized");
+
+  // 5. Log configuration summary
+  log.info("Configuration summary", {
+    unearthers: Object.keys(CONFIG.unearthers).length,
+    materials: Object.keys(CONFIG.materials).length,
+    uneartherTypes: Object.keys(CONFIG.uneartherTypes).length,
+    scanInterval: CONFIG.system.scanIntervalSeconds,
+    stackSize: CONFIG.system.transferStackSize,
   });
 
-  const nav = new NavLine(CONFIG);
-  const scanner = new Scanner(CONFIG, dir, state);
-  const queue = new Queue();
-  const executor = new Executor(CONFIG, dir, nav, state);
+  print("");
+  log.info("=== Starting main loop ===");
+  print("");
 
   // Main loop
   while (true) {
-    // Ensure dock still OK before scanning
-    const dockOk = ensureDockReady(CONFIG);
-    if (!dockOk.ok) {
-      log.error("Dock lost", dockOk);
-      sleep(2);
+    const loopStart = os.epoch("utc");
+
+    // Phase 1: Scan all unearthers
+    log.debug("Scanning unearthers...");
+    const scanRes = scanAllUnearthers(CONFIG, peripherals.modem);
+
+    if (!scanRes.ok) {
+      log.error("Scan failed", { code: scanRes.code });
+      sleep(CONFIG.system.scanIntervalSeconds);
       continue;
     }
 
-    // Optional fuel check at dock
-    const fuelRes = ensureFuelOk(CONFIG);
-    if (!fuelRes.ok) {
-      log.warn("Fuel check failed", fuelRes);
-      // we keep running; executor will also check before moving
-    }
+    const { emptyUnearthers } = scanRes.value;
 
-    // Scan -> Jobs
-    const scanRes = scanner.scan();
-    if (!scanRes.ok) {
-      log.warn("Scan failed", scanRes);
-    } else {
-      for (const job of scanRes.value.jobs) queue.push(job);
-      log.info("Scan", { jobsQueued: scanRes.value.jobs.length, queueSize: queue.size() });
-    }
-
-    // Execute queue
-    while (!queue.isEmpty()) {
-      const job = queue.pop();
-      if (!job) break;
-
-      const res = executor.run(job);
-      state.recordJobResult(job, res);
-
-      if (!res.ok) log.warn("Job failed", { job, res });
-      else log.info("Job ok", { job, res });
-
-      // Persist runtime state occasionally
-      if (CONFIG.runtime.persistStateEveryJobs > 0 && state.jobsExecuted % CONFIG.runtime.persistStateEveryJobs === 0) {
-        storage.trySave(state);
+    // Update state with scan results
+    for (const result of scanRes.value.results) {
+      const status = state.uneartherStatus[result.id];
+      if (status) {
+        status.isEmpty = result.isEmpty;
       }
     }
 
-    state.lastScanAtUtc = os.epoch("utc");
-    storage.trySaveIfInterval(state);
-    sleep(CONFIG.runtime.scanIntervalSeconds);
+    if (emptyUnearthers.length === 0) {
+      log.debug("No empty unearthers, waiting...");
+      sleep(CONFIG.system.scanIntervalSeconds);
+      continue;
+    }
+
+    log.info("Found empty unearthers", { count: emptyUnearthers.length });
+
+    // Phase 2: Get inventory contents
+    log.debug("Scanning material source...");
+    const contentsRes = getInventoryContents(peripherals.materialSource);
+
+    if (!contentsRes.ok) {
+      log.error("Failed to scan material source", { code: contentsRes.code });
+      sleep(CONFIG.system.scanIntervalSeconds);
+      continue;
+    }
+
+    const inventoryContents = contentsRes.value;
+    log.debug("Material source scanned", {
+      uniqueItems: inventoryContents.size,
+    });
+
+    // Phase 3: Process empty unearthers
+    const transfers = processEmptyUnearthers(
+      CONFIG,
+      peripherals.materialSource,
+      emptyUnearthers,
+      (unearther, contents, stackSize) =>
+        scheduler.selectMaterial(unearther, contents, stackSize),
+      inventoryContents
+    );
+
+    // Phase 4: Update state
+    if (transfers.length > 0) {
+      updateState(state, transfers);
+      log.info("Transfers complete", {
+        successful: transfers.length,
+        total: state.totalTransfers,
+      });
+    } else {
+      log.debug("No transfers performed (materials unavailable or insufficient)");
+    }
+
+    // Phase 5: Sleep until next scan
+    const elapsed = (os.epoch("utc") - loopStart) / 1000;
+    const sleepTime = math.max(0.1, CONFIG.system.scanIntervalSeconds - elapsed);
+    log.debug("Loop complete", { elapsed: string.format("%.2f", elapsed), sleepTime });
+
+    sleep(sleepTime);
   }
 }
 
+// Run main
 main();

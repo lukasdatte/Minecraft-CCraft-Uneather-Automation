@@ -4,7 +4,15 @@
       "Bash(npm run lint)",
       "Bash(npx tstl)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(cat:*)",
+      "WebSearch",
+      "Bash(where:*)",
+      "Bash(dir \"%USERPROFILE%\\\\.claude\" /b)",
+      "Bash(npm run build:*)",
+      "Bash(ls:*)"
     ]
   }
 }
