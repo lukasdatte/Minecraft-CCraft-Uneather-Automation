@@ -20,6 +20,16 @@ Mit Hammer-Blöcken (z.B. aus Ex Nihilo oder Outdoor Hammers Mod) können Materi
 
 Das System automatisiert die Produktion von Basismaterialien, sodass immer ein gewisser Vorrat vorhanden ist, ohne manuelles Eingreifen.
 
+### Design-Entscheidung: Eine Verarbeitungskette
+
+Das System verwendet **eine gemeinsame Verarbeitungskette** mit einem Processing Chest für alle Materialien. Dies wurde gewählt für:
+
+- **Einfachheit:** Eine Konfiguration, ein Inventar
+- **Flexibilität:** Verschiedene Materialien können gleichzeitig verarbeitet werden
+- **Wartbarkeit:** Weniger Peripherals zu konfigurieren
+
+**Alternative (nicht implementiert):** Separate Ketten mit jeweils eigenem Processing Chest für z.B. Netherrack-basierte Verarbeitung.
+
 ---
 
 ## Materialverarbeitungskette
@@ -247,6 +257,17 @@ Beispiel Cobblestone → Dirt:
 - Restliche Kette wird übersprungen
 - Im nächsten Loop-Durchlauf wird erneut geprüft
 - Log-Meldung (Debug-Level): "Processing chest full, skipping remaining chain"
+
+### Mehrere Materialien gleichzeitig
+
+**Situation:** Die Processing Chest enthält bereits andere Materialien (z.B. Gravel während Cobblestone hinzugefügt wird).
+
+**Handling:**
+- **Erlaubt:** Processing Chest kann verschiedene Materialien gleichzeitig enthalten
+- Jedes Material wird unabhängig verarbeitet
+- Pipes/Hopper verteilen automatisch auf die richtigen Hämmer
+- Die Chest darf komplett gefüllt werden (alle Slots belegt)
+- Erst wenn alle Slots voll sind, wird die Verarbeitung pausiert
 
 ### Nicht genug Input-Material
 

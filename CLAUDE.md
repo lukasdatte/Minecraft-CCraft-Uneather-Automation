@@ -39,6 +39,9 @@ Output: `dist/main.lua` (bundled entry point for CC:Tweaked).
 
 ### Configuration (`src/`)
 - `config.ts` - Runtime configuration (peripherals, materials, unearthers, processing)
+  - `peripherals.processingChest` - Processing chest for hammer chain input
+  - `processing.chain` - Input→Output material mappings
+  - `processing.minInputReserveStacks` / `maxOutputStacks` - Thresholds in stacks (× 64)
 - `types.ts` - All TypeScript interfaces (`AppConfig`, `ProcessingConfig`, `UneartherInstance`, etc.)
 
 ### Core (`src/core/`)
