@@ -4,7 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CC:Tweaked turtle distributor that compiles TypeScript to Lua using TypeScriptToLua. The turtle navigates linearly between a home dock and stations, scanning feed chests via wired modem. Currently infrastructure-complete with item delivery logic intentionally stubbed.
+CC:Tweaked computer-based distributor that compiles TypeScript to Lua using TypeScriptToLua. The system manages unearther machines by distributing materials from a central storage to input chests via wired modem network.
+
+### Material Processing System
+
+The system includes an automated material processing chain for hammer-based transformation:
+
+```
+Cobblestone → Dirt → Gravel → Sand → Dust
+```
+
+**How it works:**
+- Computer monitors stock levels in the central storage (Drawer Controller)
+- When input material exceeds reserve threshold and output is below maximum, transfers 1 stack to processing chest
+- External pipe system handles distribution to hammers and return of processed materials
+
+**See `docs/material-processing.md` for detailed documentation.**
 
 ## Build Commands
 
@@ -20,37 +35,28 @@ Output: `dist/main.lua` (bundled entry point for CC:Tweaked).
 ## Architecture
 
 ### Entry Point
-- `src/main.ts` - Boot sequence, main loop (scan → queue → execute → persist)
+- `src/main.ts` - Boot sequence, main loop (scan → process → distribute → sleep)
 
 ### Configuration (`src/`)
-- `config.ts` - Runtime configuration (dock, stations, world, refuel settings)
-- `types.ts` - All TypeScript interfaces (`AppConfig`, `Job`, `StationConfig`, etc.)
+- `config.ts` - Runtime configuration (peripherals, materials, unearthers, processing)
+- `types.ts` - All TypeScript interfaces (`AppConfig`, `ProcessingConfig`, `UneartherInstance`, etc.)
 
 ### Core (`src/core/`)
 - `result.ts` - `Result<T>` pattern used throughout (`ok()`, `okNoop()`, `err()`)
-- `state.ts` - Runtime state tracking (jobs executed, scan history)
-- `storage.ts` - JSON persistence on turtle filesystem
-- `checks.ts` - Dock/fuel validation
 - `errors.ts` - Error codes (`ResultCode` type)
-- `logger.ts` - Structured logging
+- `logger.ts` - Structured logging with level support (debug, info, warn, error)
 
 ### Engine (`src/engine/`)
-- `scanner.ts` - Scans remote feed chests via wired modem, creates jobs
-- `queue.ts` - FIFO job queue
-- `executor.ts` - Executes jobs (navigate to station, return home)
+- `scanner.ts` - Scans unearthers and material source via wired modem
+- `scheduler.ts` - Weighted material selection for distribution
+- `transfer.ts` - Item transfer operations to unearthers
+- `processing.ts` - Material processing chain (Cobblestone→Dirt→Gravel→Sand→Dust)
 
-### I/O (`src/io/`)
-- `inventory.ts` - Remote/local inventory wrappers
-- `turtle_inv.ts` - Turtle inventory helpers
-- `refuel.ts` - Fuel mechanics
+### Registry (`src/registry/`)
+- `peripheral.ts` - Peripheral validation and wrapping (modem, inventories, monitor)
 
-### Networking (`src/net/`)
-- `wired.ts` - Wired modem abstraction
-- `registry.ts` - `Directory` type: validated peripheral registry built from config
-
-### World (`src/world/`)
-- `nav_line.ts` - Linear navigation (forward/back N steps)
-- `calibrate.ts` - Dock orientation calibration
+### Documentation (`docs/`)
+- `material-processing.md` - Detailed documentation of the material processing system
 
 ## Key Patterns
 

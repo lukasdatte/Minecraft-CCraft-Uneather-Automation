@@ -33,6 +33,13 @@ export type ResultCode =
   // Race condition errors
   | "ERR_SLOT_CHANGED"
 
+  // Processing errors
+  | "ERR_PROCESSING_DISABLED"
+  | "ERR_PROCESSING_CHEST_MISSING"
+  | "ERR_PROCESSING_CHEST_FULL"
+  | "ERR_INPUT_BELOW_RESERVE"
+  | "ERR_OUTPUT_AT_MAX"
+
   // General errors
   | "ERR_IO";
 
@@ -41,29 +48,35 @@ export type ResultCode =
  * Useful for logging and display.
  */
 export const ERROR_MESSAGES: Record<ResultCode, string> = {
-  OK: "Success",
-  OK_NOOP: "Success (no action needed)",
+    OK: "Success",
+    OK_NOOP: "Success (no action needed)",
 
-  ERR_PERIPHERAL_OFFLINE: "Peripheral is offline or not connected",
-  ERR_PERIPHERAL_NOT_INVENTORY: "Peripheral does not have inventory methods",
-  ERR_PERIPHERAL_WRONG_TYPE: "Peripheral type mismatch",
-  ERR_MODEM_MISSING: "Wired modem not found on configured side",
-  ERR_MODEM_WIRELESS: "Modem is wireless, wired modem required",
-  ERR_MATERIAL_SOURCE_MISSING: "Material source (drawer/chest) not found",
+    ERR_PERIPHERAL_OFFLINE: "Peripheral is offline or not connected",
+    ERR_PERIPHERAL_NOT_INVENTORY: "Peripheral does not have inventory methods",
+    ERR_PERIPHERAL_WRONG_TYPE: "Peripheral type mismatch",
+    ERR_MODEM_MISSING: "Wired modem not found on configured side",
+    ERR_MODEM_WIRELESS: "Modem is wireless, wired modem required",
+    ERR_MATERIAL_SOURCE_MISSING: "Material source (drawer/chest) not found",
 
-  ERR_CONFIG_INVALID: "Configuration is invalid",
-  ERR_UNKNOWN_MATERIAL: "Unknown material ID referenced",
-  ERR_UNKNOWN_UNEARTHER_TYPE: "Unknown unearther type referenced",
-  ERR_UNKNOWN_UNEARTHER: "Unknown unearther ID referenced",
+    ERR_CONFIG_INVALID: "Configuration is invalid",
+    ERR_UNKNOWN_MATERIAL: "Unknown material ID referenced",
+    ERR_UNKNOWN_UNEARTHER_TYPE: "Unknown unearther type referenced",
+    ERR_UNKNOWN_UNEARTHER: "Unknown unearther ID referenced",
 
-  ERR_INVENTORY_EMPTY: "Inventory is empty",
-  ERR_INSUFFICIENT_STOCK: "Insufficient stock (below minimum)",
-  ERR_TRANSFER_FAILED: "Item transfer failed",
-  ERR_NO_SLOT_FOUND: "No slot found containing the requested item",
+    ERR_INVENTORY_EMPTY: "Inventory is empty",
+    ERR_INSUFFICIENT_STOCK: "Insufficient stock (below minimum)",
+    ERR_TRANSFER_FAILED: "Item transfer failed",
+    ERR_NO_SLOT_FOUND: "No slot found containing the requested item",
 
-  ERR_SCAN_FAILED: "Failed to scan inventory",
+    ERR_SCAN_FAILED: "Failed to scan inventory",
 
-  ERR_SLOT_CHANGED: "Slot content changed before transfer (race condition)",
+    ERR_SLOT_CHANGED: "Slot content changed before transfer (race condition)",
 
-  ERR_IO: "I/O error",
+    ERR_PROCESSING_DISABLED: "Processing is disabled in configuration",
+    ERR_PROCESSING_CHEST_MISSING: "Processing chest not found or offline",
+    ERR_PROCESSING_CHEST_FULL: "Processing chest has no available space",
+    ERR_INPUT_BELOW_RESERVE: "Input material would go below minimum reserve",
+    ERR_OUTPUT_AT_MAX: "Output material already at or above maximum stock",
+
+    ERR_IO: "I/O error",
 };
