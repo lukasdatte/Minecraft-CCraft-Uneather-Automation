@@ -88,12 +88,30 @@ export class ProcessingEngine {
         }
         const inventoryContents = inventoryRes.value;
 
+        // Get processing chest contents once (reused for all materials)
+        const chestContents = processingChest.list();
+
         // Process each mapping in the chain
         for (const [inputItemId, outputItemId] of Object.entries(processing.chain)) {
             // Check if processing chest has space
             if (!this.hasAvailableSpace(processingChest)) {
                 this.log.debug("Processing chest full, skipping remaining chain");
                 break;
+            }
+
+            // Check if processing chest already contains this input material
+            let alreadyInChest = false;
+            for (const [, item] of pairs(chestContents)) {
+                if (item && item.name === inputItemId) {
+                    alreadyInChest = true;
+                    break;
+                }
+            }
+            if (alreadyInChest) {
+                this.log.debug("Processing chest already contains input material", {
+                    input: inputItemId,
+                });
+                continue;
             }
 
             // Check if this material should be processed
