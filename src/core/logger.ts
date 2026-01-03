@@ -1,4 +1,5 @@
 import { LogLevel } from "../types";
+import { SafePeripheral } from "./safe-peripheral";
 
 // Types MonitorPeripheral, WriteFileHandle from @jackmacwindows/craftos-types are globally declared
 
@@ -23,7 +24,7 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 export class Logger {
     private level: LogLevel;
     private logFile?: WriteFileHandle;
-    private monitor?: MonitorPeripheral;
+    private monitor?: SafePeripheral<MonitorPeripheral>;
     private monitorLines: string[] = [];
     private maxMonitorLines = 20;
 
@@ -39,12 +40,18 @@ export class Logger {
      * Set monitor for log output.
      * Call after peripherals are validated.
      */
-    setMonitor(monitor: MonitorPeripheral): void {
+    setMonitor(monitor: SafePeripheral<MonitorPeripheral>): void {
         this.monitor = monitor;
-        const [, height] = monitor.getSize();
-        this.maxMonitorLines = height - 2;
-        monitor.setTextScale(0.5);
-        monitor.clear();
+        // Initialize monitor with batch call
+        monitor.call(
+            (m) => {
+                const [, height] = m.getSize();
+                this.maxMonitorLines = height - 2;
+                m.setTextScale(0.5);
+                m.clear();
+            },
+            undefined,
+        );
     }
 
     debug(msg: string, data?: unknown): void {
@@ -127,20 +134,25 @@ export class Logger {
             this.monitorLines.shift();
         }
 
-        // Redraw monitor
-        const monitor = this.monitor;
-        monitor.clear();
+        // Redraw monitor with batch call (silent fail on disconnect)
+        const linesToDraw = this.monitorLines;
+        this.monitor.call(
+            (m) => {
+                m.clear();
 
-        // Header
-        monitor.setCursorPos(1, 1);
-        monitor.setTextColor(colors.yellow);
-        monitor.write("=== Unearther Distribution System ===");
+                // Header
+                m.setCursorPos(1, 1);
+                m.setTextColor(colors.yellow);
+                m.write("=== Unearther Distribution System ===");
 
-        // Log lines
-        monitor.setTextColor(colors.white);
-        for (let i = 0; i < this.monitorLines.length; i++) {
-            monitor.setCursorPos(1, i + 2);
-            monitor.write(this.monitorLines[i]);
-        }
+                // Log lines
+                m.setTextColor(colors.white);
+                for (let i = 0; i < linesToDraw.length; i++) {
+                    m.setCursorPos(1, i + 2);
+                    m.write(linesToDraw[i]);
+                }
+            },
+            undefined,
+        );
     }
 }

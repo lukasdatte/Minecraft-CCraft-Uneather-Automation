@@ -153,7 +153,7 @@ export const CONFIG: AppConfig = {
         // Minimum items to keep in reserve (e.g., 2 * STACK_SIZE = 128 items)
         minInputReserve: 2 * STACK_SIZE,
         // Maximum items of output before stopping production (e.g., 4 * STACK_SIZE = 256 items)
-        maxOutputStock: 4 * STACK_SIZE,
+        maxOutputStock: 128 * STACK_SIZE,
         // Processing chain: input item ID → output item ID
         chain: {
             "minecraft:cobblestone": "minecraft:dirt",

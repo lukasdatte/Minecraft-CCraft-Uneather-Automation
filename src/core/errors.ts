@@ -9,6 +9,7 @@ export type ResultCode =
 
   // Peripheral errors
   | "ERR_PERIPHERAL_OFFLINE"
+  | "ERR_PERIPHERAL_DISCONNECTED"
   | "ERR_PERIPHERAL_NOT_INVENTORY"
   | "ERR_PERIPHERAL_WRONG_TYPE"
   | "ERR_MODEM_MISSING"
@@ -52,6 +53,7 @@ export const ERROR_MESSAGES: Record<ResultCode, string> = {
     OK_NOOP: "Success (no action needed)",
 
     ERR_PERIPHERAL_OFFLINE: "Peripheral is offline or not connected",
+    ERR_PERIPHERAL_DISCONNECTED: "Peripheral disconnected during operation",
     ERR_PERIPHERAL_NOT_INVENTORY: "Peripheral does not have inventory methods",
     ERR_PERIPHERAL_WRONG_TYPE: "Peripheral type mismatch",
     ERR_MODEM_MISSING: "Wired modem not found on configured side",

@@ -1,5 +1,6 @@
 import { Result, ok, okNoop, err } from "../core/result";
 import { Logger } from "../core/logger";
+import { SafePeripheral } from "../core/safe-peripheral";
 import { Scanner } from "./scanner";
 import {
     AppConfig,
@@ -25,9 +26,8 @@ export class ProcessingEngine {
      */
     runPhase(
         config: AppConfig,
-        materialSource: InventoryPeripheral,
-        processingChest: InventoryPeripheral | undefined,
-        processingChestName: string | undefined,
+        materialSource: SafePeripheral<InventoryPeripheral>,
+        processingChest: SafePeripheral<InventoryPeripheral> | undefined,
     ): Result<ProcessingResult[]> {
         // Guard: Check if processing is configured
         if (!config.processing || !config.processing.enabled) {
@@ -35,7 +35,7 @@ export class ProcessingEngine {
         }
 
         // Guard: Check if processing chest is available
-        if (!processingChest || !processingChestName) {
+        if (!processingChest) {
             this.log.warn("Processing enabled but processing chest not available");
             return err("ERR_PROCESSING_CHEST_MISSING");
         }
@@ -46,7 +46,6 @@ export class ProcessingEngine {
             config,
             materialSource,
             processingChest,
-            processingChestName,
         );
 
         if (results.length > 0) {
@@ -67,9 +66,8 @@ export class ProcessingEngine {
      */
     private processAllMaterials(
         config: AppConfig,
-        materialSource: InventoryPeripheral,
-        processingChest: InventoryPeripheral,
-        processingChestName: string,
+        materialSource: SafePeripheral<InventoryPeripheral>,
+        processingChest: SafePeripheral<InventoryPeripheral>,
     ): ProcessingResult[] {
         const results: ProcessingResult[] = [];
         const processing = config.processing;
@@ -89,13 +87,18 @@ export class ProcessingEngine {
         const inventoryContents = inventoryRes.value;
 
         // Get processing chest contents once (reused for all materials)
-        const chestContents = processingChest.list();
+        const chestContents = processingChest.call((p) => p.list(), undefined);
+        if (!chestContents) {
+            this.log.warn("Processing chest disconnected");
+            return results;
+        }
 
         // Process each mapping in the chain
         for (const [inputItemId, outputItemId] of Object.entries(processing.chain)) {
             // Check if processing chest has space
-            if (!this.hasAvailableSpace(processingChest)) {
-                this.log.debug("Processing chest full, skipping remaining chain");
+            const spaceRes = this.hasAvailableSpace(processingChest);
+            if (!spaceRes.ok || !spaceRes.value) {
+                this.log.debug("Processing chest full or disconnected, skipping remaining chain");
                 break;
             }
 
@@ -130,7 +133,7 @@ export class ProcessingEngine {
             // Perform the transfer
             const transferRes = this.transferToProcessing(
                 materialSource,
-                processingChestName,
+                processingChest.getName(),
                 inputItemId,
                 outputItemId,
                 shouldRes.value.sourceSlot,
@@ -155,20 +158,35 @@ export class ProcessingEngine {
 
     /**
      * Check if processing chest has available space.
+     * Uses batch call to minimize peripheral operations.
      */
-    private hasAvailableSpace(processingChest: InventoryPeripheral): boolean {
-        const size = processingChest.size();
-        const items = processingChest.list();
+    private hasAvailableSpace(
+        processingChest: SafePeripheral<InventoryPeripheral>,
+    ): Result<boolean> {
+        const result = processingChest.call(
+            (p) => {
+                const size = p.size();
+                const items = p.list();
 
-        // Count occupied slots
-        let occupied = 0;
-        for (const [, item] of pairs(items)) {
-            if (item && item.count > 0) {
-                occupied++;
-            }
+                if (!items || size === undefined) return undefined;
+
+                // Count occupied slots
+                let occupied = 0;
+                for (const [, item] of pairs(items)) {
+                    if (item && item.count > 0) {
+                        occupied++;
+                    }
+                }
+
+                return occupied < size;
+            },
+            undefined,
+        );
+
+        if (result === undefined) {
+            return err("ERR_PERIPHERAL_DISCONNECTED");
         }
-
-        return occupied < size;
+        return ok(result);
     }
 
     /**
@@ -234,9 +252,10 @@ export class ProcessingEngine {
 
     /**
      * Perform a single transfer to the processing chest.
+     * Uses batch call to verify slot content and transfer atomically.
      */
     private transferToProcessing(
-        materialSource: InventoryPeripheral,
+        materialSource: SafePeripheral<InventoryPeripheral>,
         processingChestName: string,
         inputItemId: string,
         outputItemId: string,
@@ -249,50 +268,72 @@ export class ProcessingEngine {
             target: processingChestName,
         });
 
-        // Verify slot still contains expected item (race condition protection)
-        const currentItem = materialSource.getItemDetail(sourceSlot);
+        // Batch call: verify slot content and transfer atomically
+        type TransferCallResult =
+            | { error: "slot_changed"; actual: string | undefined }
+            | { error: "transfer_failed" }
+            | { error: "disconnected" }
+            | { transferred: number };
 
-        if (!currentItem || currentItem.name !== inputItemId) {
-            this.log.warn("Slot content changed before processing transfer", {
-                slot: sourceSlot,
-                expected: inputItemId,
-                actual: currentItem?.name ?? "empty",
-            });
-            return err("ERR_SLOT_CHANGED", {
-                slot: sourceSlot,
-                expected: inputItemId,
-                actual: currentItem?.name ?? "empty",
-            });
-        }
+        const result: TransferCallResult = materialSource.call(
+            (p): TransferCallResult => {
+                // Verify slot still contains expected item (race condition protection)
+                const currentItem = p.getItemDetail(sourceSlot);
 
-        // Perform the transfer (exactly 1 stack = 64 items)
-        const transferred = materialSource.pushItems(
-            processingChestName,
-            sourceSlot,
-            STACK_SIZE,
+                if (!currentItem || currentItem.name !== inputItemId) {
+                    return { error: "slot_changed", actual: currentItem?.name };
+                }
+
+                // Perform the transfer (exactly 1 stack = 64 items)
+                const transferred = p.pushItems(processingChestName, sourceSlot, STACK_SIZE);
+
+                if (transferred === 0) {
+                    return { error: "transfer_failed" };
+                }
+
+                return { transferred };
+            },
+            { error: "disconnected" },
         );
 
-        if (transferred === 0) {
-            this.log.warn("Processing transfer returned 0 items", {
-                input: inputItemId,
-                sourceSlot,
-            });
-            return err("ERR_TRANSFER_FAILED", {
-                input: inputItemId,
-                reason: "no_items_transferred",
-            });
+        if ("error" in result) {
+            if (result.error === "slot_changed") {
+                this.log.warn("Slot content changed before processing transfer", {
+                    slot: sourceSlot,
+                    expected: inputItemId,
+                    actual: result.actual ?? "empty",
+                });
+                return err("ERR_SLOT_CHANGED", {
+                    slot: sourceSlot,
+                    expected: inputItemId,
+                    actual: result.actual ?? "empty",
+                });
+            }
+            if (result.error === "transfer_failed") {
+                this.log.warn("Processing transfer returned 0 items", {
+                    input: inputItemId,
+                    sourceSlot,
+                });
+                return err("ERR_TRANSFER_FAILED", {
+                    input: inputItemId,
+                    reason: "no_items_transferred",
+                });
+            }
+            // disconnected
+            this.log.warn("Material source disconnected during processing transfer");
+            return err("ERR_PERIPHERAL_DISCONNECTED");
         }
 
         this.log.info("Processing transfer complete", {
             input: inputItemId,
             output: outputItemId,
-            items: transferred,
+            items: result.transferred,
         });
 
         return ok({
             inputItemId,
             outputItemId,
-            itemsTransferred: transferred,
+            itemsTransferred: result.transferred,
             sourceSlot,
         });
     }

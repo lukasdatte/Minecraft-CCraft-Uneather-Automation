@@ -107,8 +107,8 @@ function main(): void {
         log.info("Monitor connected");
     }
 
-    // 5. Create Scanner (needs: PeripheralRegistry, Logger)
-    const scanner = new Scanner(peripheralRegistry, log);
+    // 5. Create Scanner (needs: Logger)
+    const scanner = new Scanner(log);
 
     // 6. Create Scheduler (needs: Config, Logger)
     const scheduler = new Scheduler(CONFIG, log);
@@ -147,7 +147,7 @@ function main(): void {
 
         // Phase 1: Scan all unearthers
         log.debug("Scanning unearthers...");
-        const scanRes = scanner.scanAllUnearthers(CONFIG, peripherals.modem);
+        const scanRes = scanner.scanAllUnearthers(CONFIG, peripherals);
 
         if (!scanRes.ok) {
             log.error("Scan failed", { code: scanRes.code });
@@ -185,7 +185,6 @@ function main(): void {
             CONFIG,
             peripherals.materialSource,
             peripherals.processingChest,
-            peripherals.processingChestName,
         );
 
         if (processingRes.ok && processingRes.value.length > 0) {

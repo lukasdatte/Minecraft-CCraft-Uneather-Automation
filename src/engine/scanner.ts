@@ -1,6 +1,7 @@
-import { Result, ok, err } from "../core/result";
+import { Result, ok, err, ErrorCode } from "../core/result";
 import { Logger } from "../core/logger";
-import { PeripheralRegistry } from "../registry/peripheral";
+import { SafePeripheral } from "../core/safe-peripheral";
+import { ValidatedPeripherals } from "../registry/peripheral";
 import {
     AppConfig,
     UneartherId,
@@ -32,16 +33,13 @@ export interface ScanResult {
  * Scanner for checking unearther status and inventory contents.
  */
 export class Scanner {
-    constructor(
-        private peripheralRegistry: PeripheralRegistry,
-        private log: Logger,
-    ) {}
+    constructor(private log: Logger) {}
 
     /**
      * Scan all unearthers in the config.
      * Returns scan results for each unearther and a list of empty ones.
      */
-    scanAllUnearthers(config: AppConfig, modem: WiredModemPeripheral): Result<ScanResult> {
+    scanAllUnearthers(config: AppConfig, peripherals: ValidatedPeripherals): Result<ScanResult> {
         this.log.debug("Starting scan of all unearthers", {
             count: Object.keys(config.unearthers).length,
         });
@@ -51,7 +49,7 @@ export class Scanner {
         let errors = 0;
 
         for (const [id, unearther] of Object.entries(config.unearthers)) {
-            const scanRes = this.scanUnearther(modem, unearther);
+            const scanRes = this.scanUnearther(peripherals, unearther);
 
             if (scanRes.ok) {
                 results.push(scanRes.value);
@@ -60,6 +58,10 @@ export class Scanner {
                 }
             } else {
                 errors++;
+                this.log.warn("Failed to scan unearther", {
+                    id,
+                    code: scanRes.code,
+                });
                 results.push({ id, isEmpty: false });
             }
         }
@@ -83,10 +85,12 @@ export class Scanner {
      * Get inventory contents from material source.
      * Returns a map of itemId -> InventoryItemInfo (totalCount + slots).
      */
-    getInventoryContents(inv: InventoryPeripheral): Result<Map<string, InventoryItemInfo>> {
+    getInventoryContents(
+        inv: SafePeripheral<InventoryPeripheral>,
+    ): Result<Map<string, InventoryItemInfo>> {
         const contents = new Map<string, InventoryItemInfo>();
 
-        const items = inv.list();
+        const items = inv.call((p) => p.list(), undefined);
 
         if (!items) {
             return err("ERR_SCAN_FAILED");
@@ -115,7 +119,7 @@ export class Scanner {
     // ========================================
 
     private scanUnearther(
-        modem: WiredModemPeripheral,
+        peripherals: ValidatedPeripherals,
         unearther: UneartherInstance,
     ): Result<UneartherScanResult> {
         if (type(unearther.inputChest) !== "string") {
@@ -127,8 +131,10 @@ export class Scanner {
             return err("ERR_CONFIG_INVALID", { id: unearther.id });
         }
 
-        if (!this.peripheralRegistry.isRemotePresent(modem, unearther.inputChest)) {
-            this.log.warn("Unearther input chest offline", {
+        // Get pre-wrapped SafePeripheral from ValidatedPeripherals
+        const safeInv = peripherals.uneartherChests.get(unearther.inputChest);
+        if (!safeInv) {
+            this.log.warn("Unearther chest not in validated peripherals", {
                 id: unearther.id,
                 chest: unearther.inputChest,
             });
@@ -138,30 +144,31 @@ export class Scanner {
             });
         }
 
-        const inv = peripheral.wrap(unearther.inputChest) as InventoryPeripheral | null;
-
-        if (!inv) {
-            this.log.warn("Failed to wrap unearther chest", { id: unearther.id });
-            return err("ERR_SCAN_FAILED", { id: unearther.id });
+        const isEmptyRes = this.isInventoryEmpty(safeInv);
+        if (!isEmptyRes.ok) {
+            return err(isEmptyRes.code as ErrorCode, { id: unearther.id });
         }
 
-        const isEmpty = this.isInventoryEmpty(inv);
-
-        this.log.debug("Scanned unearther", { id: unearther.id, isEmpty });
+        this.log.debug("Scanned unearther", { id: unearther.id, isEmpty: isEmptyRes.value });
 
         return ok({
             id: unearther.id,
-            isEmpty,
+            isEmpty: isEmptyRes.value,
         });
     }
 
-    private isInventoryEmpty(inv: InventoryPeripheral): boolean {
-        const items = inv.list();
+    private isInventoryEmpty(inv: SafePeripheral<InventoryPeripheral>): Result<boolean> {
+        const items = inv.call((p) => p.list(), undefined);
+
+        if (!items) {
+            return err("ERR_PERIPHERAL_DISCONNECTED");
+        }
+
         for (const [, item] of pairs(items)) {
             if (item && item.count > 0) {
-                return false;
+                return ok(false);
             }
         }
-        return true;
+        return ok(true);
     }
 }

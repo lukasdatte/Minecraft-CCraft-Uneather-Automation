@@ -1,5 +1,6 @@
 import { Result, ok, err } from "../core/result";
 import { Logger } from "../core/logger";
+import { SafePeripheral } from "../core/safe-peripheral";
 import { AppConfig, UneartherInstance, MaterialId } from "../types";
 import { MaterialSelection } from "./scheduler";
 
@@ -27,9 +28,10 @@ export class TransferEngine {
 
     /**
      * Transfer items from material source to an unearther's input chest.
+     * Uses batch call to verify slot content and transfer atomically.
      */
     transferToUnearther(
-        materialSource: InventoryPeripheral,
+        materialSource: SafePeripheral<InventoryPeripheral>,
         targetChestName: string,
         unearther: UneartherInstance,
         selection: MaterialSelection,
@@ -43,52 +45,76 @@ export class TransferEngine {
             amount: stackSize,
         });
 
-        // Verify slot still contains expected item (race condition protection)
-        const currentItem = materialSource.getItemDetail(selection.sourceSlot);
+        // Batch call: verify slot content and transfer atomically
+        type TransferCallResult =
+            | { error: "slot_changed"; actual: string | undefined }
+            | { error: "transfer_failed" }
+            | { error: "disconnected" }
+            | { transferred: number };
 
-        if (!currentItem || currentItem.name !== selection.material.itemId) {
-            this.log.warn("Slot content changed before transfer", {
-                slot: selection.sourceSlot,
-                expected: selection.material.itemId,
-                actual: currentItem?.name ?? "empty",
-            });
-            return err("ERR_SLOT_CHANGED", {
-                slot: selection.sourceSlot,
-                expected: selection.material.itemId,
-                actual: currentItem?.name ?? "empty",
-            });
-        }
+        const result: TransferCallResult = materialSource.call(
+            (p): TransferCallResult => {
+                // Verify slot still contains expected item (race condition protection)
+                const currentItem = p.getItemDetail(selection.sourceSlot);
 
-        // Perform the transfer using pushItems
-        const transferred = materialSource.pushItems(
-            targetChestName,
-            selection.sourceSlot,
-            stackSize,
+                if (!currentItem || currentItem.name !== selection.material.itemId) {
+                    return { error: "slot_changed", actual: currentItem?.name };
+                }
+
+                // Perform the transfer using pushItems
+                const transferred = p.pushItems(targetChestName, selection.sourceSlot, stackSize);
+
+                if (transferred === 0) {
+                    return { error: "transfer_failed" };
+                }
+
+                return { transferred };
+            },
+            { error: "disconnected" },
         );
 
-        if (transferred === 0) {
-            this.log.warn("Transfer returned 0 items", {
+        if ("error" in result) {
+            if (result.error === "slot_changed") {
+                this.log.warn("Slot content changed before transfer", {
+                    slot: selection.sourceSlot,
+                    expected: selection.material.itemId,
+                    actual: result.actual ?? "empty",
+                });
+                return err("ERR_SLOT_CHANGED", {
+                    slot: selection.sourceSlot,
+                    expected: selection.material.itemId,
+                    actual: result.actual ?? "empty",
+                });
+            }
+            if (result.error === "transfer_failed") {
+                this.log.warn("Transfer returned 0 items", {
+                    unearther: unearther.id,
+                    material: selection.materialId,
+                    sourceSlot: selection.sourceSlot,
+                });
+                return err("ERR_TRANSFER_FAILED", {
+                    unearther: unearther.id,
+                    material: selection.materialId,
+                    reason: "no_items_transferred",
+                });
+            }
+            // disconnected
+            this.log.warn("Material source disconnected during transfer", {
                 unearther: unearther.id,
-                material: selection.materialId,
-                sourceSlot: selection.sourceSlot,
             });
-            return err("ERR_TRANSFER_FAILED", {
-                unearther: unearther.id,
-                material: selection.materialId,
-                reason: "no_items_transferred",
-            });
+            return err("ERR_PERIPHERAL_DISCONNECTED");
         }
 
         this.log.info("Transfer complete", {
             unearther: unearther.id,
             material: selection.materialId,
-            items: transferred,
+            items: result.transferred,
         });
 
         return ok({
             unearther,
             materialId: selection.materialId,
-            itemsTransferred: transferred,
+            itemsTransferred: result.transferred,
             sourceSlot: selection.sourceSlot,
         });
     }
@@ -98,7 +124,7 @@ export class TransferEngine {
      */
     processEmptyUnearthers(
         config: AppConfig,
-        materialSource: InventoryPeripheral,
+        materialSource: SafePeripheral<InventoryPeripheral>,
         emptyUneartherIds: string[],
         selectMaterial: (
             unearther: UneartherInstance,
@@ -144,6 +170,13 @@ export class TransferEngine {
                         inventoryContents.delete(selection.material.itemId);
                     }
                 }
+            } else {
+                // Explicitly log failed transfers
+                this.log.warn("Transfer failed for unearther", {
+                    unearther: uneartherId,
+                    code: transferRes.code,
+                    detail: "detail" in transferRes ? transferRes.detail : undefined,
+                });
             }
         }
 

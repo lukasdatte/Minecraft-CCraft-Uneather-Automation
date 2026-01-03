@@ -48,6 +48,7 @@ Output: `dist/main.lua` (bundled entry point for CC:Tweaked).
 - `result.ts` - `Result<T>` pattern used throughout (`ok()`, `okNoop()`, `err()`)
 - `errors.ts` - Error codes (`ResultCode` type)
 - `logger.ts` - Structured logging with level support (debug, info, warn, error)
+- `safe-peripheral.ts` - `SafePeripheral<T>` wrapper for resilient peripheral access
 
 ### Engine (`src/engine/`)
 - `scanner.ts` - Scans unearthers and material source via wired modem
@@ -66,6 +67,50 @@ Output: `dist/main.lua` (bundled entry point for CC:Tweaked).
 - **Config-first**: Stations and peripherals are defined in `config.ts`, validated against wired network at boot
 - **Result pattern**: All functions return `Result<T>` with `.ok`, `.code`, `.value` or `.detail`
 - **No implicit self**: TSTL configured with `noImplicitSelf: true` (no Lua `self` parameter)
+
+### Peripheral Resilience (SafePeripheral)
+
+CC:Tweaked peripherals can disconnect at runtime. Wrapped peripheral objects become stale after disconnect/reconnect. `SafePeripheral<T>` provides resilience:
+
+- **Try/catch** around all operations (compiles to Lua `pcall`)
+- **Lazy re-wrap**: On failure, automatically tries `peripheral.wrap()` and retries once
+
+**Methods:**
+- `call(op, fallback)` - Execute with auto-reconnect, return fallback on error
+- `tryCall(op)` - Execute with auto-reconnect, return `Result<T>`
+- `isConnected()` - Check connectivity via modem (optional, separate from call)
+- `getName()` - Peripheral name for `pushItems`, logging
+
+**Pattern - simple operation:**
+```typescript
+const items = inv.call(p => p.list(), undefined);
+if (!items) return err("ERR_SCAN_FAILED");
+```
+
+**Pattern - batch operation (multiple calls in one):**
+```typescript
+const result = inv.call(p => {
+    const currentItem = p.getItemDetail(slot);
+    if (!currentItem || currentItem.name !== expectedItem) {
+        return { error: "slot_changed" as const };
+    }
+    const transferred = p.pushItems(target, slot, amount);
+    if (transferred === 0) {
+        return { error: "transfer_failed" as const };
+    }
+    return { transferred };
+}, { error: "disconnected" as const });
+
+if ("error" in result) {
+    // Handle specific error...
+}
+```
+
+**Lazy Re-Wrap Behavior:**
+1. Operation executed on cached peripheral
+2. On exception: `peripheral.wrap()` called to get fresh reference
+3. On success: Operation retried once with new reference
+4. On second failure: Fallback/error returned
 
 ## TSTL Specifics
 

@@ -1,19 +1,20 @@
 import { Result, ok, err } from "../core/result";
 import { Logger } from "../core/logger";
+import { SafePeripheral, wrapPeripheral } from "../core/safe-peripheral";
 import { AppConfig, Side } from "../types";
 
 // Types from @jackmacwindows/craftos-types are globally declared (not module exports)
 
 /**
  * Validated peripheral registry with wrapped peripherals.
+ * All peripherals (except modem) are wrapped in SafePeripheral for resilience.
  */
 export interface ValidatedPeripherals {
     modem: WiredModemPeripheral;
-    materialSource: InventoryPeripheral;
-    materialSourceName: string;
-    monitor?: MonitorPeripheral;
-    processingChest?: InventoryPeripheral;
-    processingChestName?: string;
+    materialSource: SafePeripheral<InventoryPeripheral>;
+    monitor?: SafePeripheral<MonitorPeripheral>;
+    processingChest?: SafePeripheral<InventoryPeripheral>;
+    uneartherChests: Map<string, SafePeripheral<InventoryPeripheral>>;
 }
 
 /**
@@ -28,7 +29,7 @@ export class PeripheralRegistry {
     validate(config: AppConfig): Result<ValidatedPeripherals> {
         this.log.info("Validating peripherals...");
 
-        // 1. Get wired modem
+        // 1. Get wired modem (stays raw - needed for connectivity checks)
         const modemSide = config.peripherals.modem.name as Side;
         const modemRes = this.getWiredModem(modemSide);
         if (!modemRes.ok) {
@@ -42,9 +43,9 @@ export class PeripheralRegistry {
         const remotes = modem.getNamesRemote();
         this.log.debug("Remote peripherals found", { count: remotes.length, names: remotes });
 
-        // 3. Validate material source
+        // 3. Validate material source (wrapped in SafePeripheral)
         const materialSourceName = config.peripherals.materialSource.name;
-        const materialSourceRes = this.wrapInventory(modem, materialSourceName);
+        const materialSourceRes = this.validateInventory(modem, materialSourceName);
         if (!materialSourceRes.ok) {
             this.log.error("Failed to get material source", {
                 name: materialSourceName,
@@ -52,27 +53,36 @@ export class PeripheralRegistry {
             });
             return materialSourceRes as Result<ValidatedPeripherals>;
         }
+        const materialSource = materialSourceRes.value;
         this.log.info("Material source validated", { name: materialSourceName });
 
-        // 4. Validate all unearther input chests
+        // 4. Validate and wrap all unearther input chests
+        const uneartherChests = new Map<string, SafePeripheral<InventoryPeripheral>>();
         for (const [id, unearther] of Object.entries(config.unearthers)) {
-            const chestRes = this.wrapInventory(modem, unearther.inputChest);
+            const chestRes = this.validateInventory(modem, unearther.inputChest);
             if (!chestRes.ok) {
-                this.log.error("Failed to validate unearther input chest", {
+                this.log.warn("Unearther chest not available at boot", {
                     id,
                     chest: unearther.inputChest,
                     code: chestRes.code,
                 });
-                return chestRes as Result<ValidatedPeripherals>;
+                // Continue with other unearthers instead of failing completely
+                continue;
             }
+            uneartherChests.set(unearther.inputChest, chestRes.value);
             this.log.debug("Unearther input chest validated", { id, chest: unearther.inputChest });
         }
 
-        // 5. Validate monitor (optional)
-        let monitor: MonitorPeripheral | undefined;
+        if (uneartherChests.size === 0) {
+            this.log.error("No unearther chests could be validated");
+            return err("ERR_PERIPHERAL_OFFLINE", { reason: "no_unearther_chests" });
+        }
+
+        // 5. Validate monitor (optional, wrapped in SafePeripheral)
+        let monitor: SafePeripheral<MonitorPeripheral> | undefined;
         if (config.peripherals.monitor) {
             const monitorName = config.peripherals.monitor.name;
-            const monitorRes = this.wrapMonitor(modem, monitorName);
+            const monitorRes = this.validateMonitor(modem, monitorName);
             if (monitorRes.ok) {
                 monitor = monitorRes.value;
                 this.log.info("Monitor validated", { name: monitorName });
@@ -84,12 +94,11 @@ export class PeripheralRegistry {
             }
         }
 
-        // 6. Validate processing chest (optional, only if processing enabled)
-        let processingChest: InventoryPeripheral | undefined;
-        let processingChestName: string | undefined;
+        // 6. Validate processing chest (optional, wrapped in SafePeripheral)
+        let processingChest: SafePeripheral<InventoryPeripheral> | undefined;
         if (config.peripherals.processingChest && config.processing?.enabled) {
-            processingChestName = config.peripherals.processingChest.name;
-            const processingChestRes = this.wrapInventory(modem, processingChestName);
+            const processingChestName = config.peripherals.processingChest.name;
+            const processingChestRes = this.validateInventory(modem, processingChestName);
             if (processingChestRes.ok) {
                 processingChest = processingChestRes.value;
                 this.log.info("Processing chest validated", { name: processingChestName });
@@ -98,7 +107,6 @@ export class PeripheralRegistry {
                     name: processingChestName,
                     code: processingChestRes.code,
                 });
-                processingChestName = undefined;
             }
         }
 
@@ -121,15 +129,18 @@ export class PeripheralRegistry {
             }
         }
 
-        this.log.info("All peripherals validated successfully");
+        this.log.info("All peripherals validated successfully", {
+            uneartherChests: uneartherChests.size,
+            hasMonitor: !!monitor,
+            hasProcessingChest: !!processingChest,
+        });
 
         return ok({
             modem,
-            materialSource: materialSourceRes.value,
-            materialSourceName,
+            materialSource,
             monitor,
             processingChest,
-            processingChestName,
+            uneartherChests,
         });
     }
 
@@ -144,13 +155,6 @@ export class PeripheralRegistry {
             }
         }
         return false;
-    }
-
-    /**
-     * Wrap an unearther's input chest.
-     */
-    wrapUneartherChest(modem: WiredModemPeripheral, chestName: string): Result<InventoryPeripheral> {
-        return this.wrapInventory(modem, chestName);
     }
 
     // ========================================
@@ -175,12 +179,15 @@ export class PeripheralRegistry {
         return ok(modem);
     }
 
-    private wrapInventory(modem: WiredModemPeripheral, name: string): Result<InventoryPeripheral> {
+    private validateInventory(
+        modem: WiredModemPeripheral,
+        name: string,
+    ): Result<SafePeripheral<InventoryPeripheral>> {
         if (!this.isRemotePresent(modem, name)) {
             return err("ERR_PERIPHERAL_OFFLINE", { name });
         }
 
-        const inv = peripheral.wrap(name) as InventoryPeripheral;
+        const inv = peripheral.wrap(name) as InventoryPeripheral | undefined;
         if (!inv) {
             return err("ERR_PERIPHERAL_OFFLINE", { name });
         }
@@ -189,15 +196,18 @@ export class PeripheralRegistry {
             return err("ERR_PERIPHERAL_NOT_INVENTORY", { name });
         }
 
-        return ok(inv);
+        return ok(wrapPeripheral(modem, name, inv, this.log));
     }
 
-    private wrapMonitor(modem: WiredModemPeripheral, name: string): Result<MonitorPeripheral> {
+    private validateMonitor(
+        modem: WiredModemPeripheral,
+        name: string,
+    ): Result<SafePeripheral<MonitorPeripheral>> {
         if (!this.isRemotePresent(modem, name)) {
             return err("ERR_PERIPHERAL_OFFLINE", { name });
         }
 
-        const mon = peripheral.wrap(name) as MonitorPeripheral;
+        const mon = peripheral.wrap(name) as MonitorPeripheral | undefined;
         if (!mon) {
             return err("ERR_PERIPHERAL_OFFLINE", { name });
         }
@@ -206,13 +216,6 @@ export class PeripheralRegistry {
             return err("ERR_PERIPHERAL_WRONG_TYPE", { name, expected: "monitor" });
         }
 
-        return ok(mon);
+        return ok(wrapPeripheral(modem, name, mon, this.log));
     }
-}
-
-/**
- * Get the name of the material source for use in pushItems.
- */
-export function getMaterialSourceName(config: AppConfig): string {
-    return config.peripherals.materialSource.name;
 }
