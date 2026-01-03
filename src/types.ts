@@ -218,68 +218,9 @@ export interface AppState {
 }
 
 // ============================================================
-// INVENTORY PERIPHERAL INTERFACE
+// CC:TWEAKED PERIPHERAL TYPES - RE-EXPORTED FROM craftos-types
 // ============================================================
-
-/** CC:Tweaked inventory item details */
-export interface ItemDetail {
-    name: string;
-    count: number;
-    nbt?: string;
-}
-
-/** CC:Tweaked inventory peripheral interface (uses function-call syntax) */
-export interface InventoryPeripheral {
-    /** List all items in the inventory */
-    list(this: void): LuaTable<number, ItemDetail>;
-    /** Get the size of the inventory */
-    size(this: void): number;
-    /** Push items to another inventory */
-    pushItems(this: void, toName: string, fromSlot: number, limit?: number, toSlot?: number): number;
-    /** Pull items from another inventory */
-    pullItems(this: void, fromName: string, fromSlot: number, limit?: number, toSlot?: number): number;
-    /** Get detailed item info for a slot */
-    getItemDetail(this: void, slot: number): ItemDetail | null;
-}
-
-/** CC:Tweaked wired modem interface (uses function-call syntax) */
-export interface WiredModem {
-    /** Check if this is a wireless modem */
-    isWireless(this: void): boolean;
-    /** Get names of all remote peripherals */
-    getNamesRemote(this: void): string[];
-    /** Check if a remote peripheral is present */
-    isPresentRemote(this: void, name: string): boolean;
-    /** Get the local name of this modem on the network */
-    getNameLocal(this: void): string;
-}
-
-/** CC:Tweaked monitor interface (uses function-call syntax) */
-export interface MonitorPeripheral {
-    /** Write text at current cursor position */
-    write(this: void, text: string): void;
-    /** Clear the screen */
-    clear(this: void): void;
-    /** Set cursor position */
-    setCursorPos(this: void, x: number, y: number): void;
-    /** Get monitor size */
-    getSize(this: void): LuaMultiReturn<[number, number]>;
-    /** Set text color */
-    setTextColor(this: void, color: number): void;
-    /** Set background color */
-    setBackgroundColor(this: void, color: number): void;
-    /** Set text scale */
-    setTextScale(this: void, scale: number): void;
-}
-
-/** CC:Tweaked file write handle (uses function-call syntax) */
-export interface WriteHandle {
-    /** Write text without newline */
-    write(this: void, text: string): void;
-    /** Write text with newline */
-    writeLine(this: void, text: string): void;
-    /** Flush buffer to disk */
-    flush(this: void): void;
-    /** Close the file */
-    close(this: void): void;
-}
+// IMPORTANT: Do NOT define custom peripheral interfaces here!
+// Use the types from @jackmacwindows/craftos-types which have
+// proper @noSelf annotations for TSTL compatibility.
+// See CLAUDE.md for details on why this matters.

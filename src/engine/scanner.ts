@@ -5,10 +5,10 @@ import {
     AppConfig,
     UneartherId,
     UneartherInstance,
-    InventoryPeripheral,
-    WiredModem,
     InventoryItemInfo,
 } from "../types";
+
+// Types InventoryPeripheral, WiredModemPeripheral from @jackmacwindows/craftos-types are globally declared
 
 /**
  * Result of scanning a single unearther.
@@ -47,7 +47,7 @@ function isInventoryEmpty(inv: InventoryPeripheral): boolean {
  * Scan a single unearther's input chest.
  */
 function scanUnearther(
-    modem: WiredModem,
+    modem: WiredModemPeripheral,
     unearther: UneartherInstance,
 ): Result<UneartherScanResult> {
     // Debug: verify inputChest is a string
@@ -97,7 +97,7 @@ function scanUnearther(
  */
 export function scanAllUnearthers(
     config: AppConfig,
-    modem: WiredModem,
+    modem: WiredModemPeripheral,
 ): Result<ScanResult> {
     log.debug("Starting scan of all unearthers", {
         count: Object.keys(config.unearthers).length,

@@ -72,3 +72,40 @@ Output: `dist/main.lua` (bundled entry point for CC:Tweaked).
 - Target: `CC-5.2` (ComputerCraft Lua)
 - Types: `@jackmacwindows/lua-types/cc-5.2`, `craftos-types`, `cc-types`
 - Bundle mode: All TS compiled into single `main.lua`
+
+### Peripheral Types & @noSelf
+
+CC:Tweaked peripherals use **function-call syntax** (`.`) instead of method-call syntax (`:`).
+We use `@jackmacwindows/craftos-types` which provides properly annotated interfaces with `@noSelf`.
+
+**Why this matters:**
+- TSTL default for interface methods: `obj:method()` (passes `self` as first argument)
+- CC:Tweaked expects: `obj.method()` (no `self` parameter)
+- Without `@noSelf`: Runtime error `bad argument #1 (number expected, got table)`
+
+**Example of the problem:**
+```typescript
+// If you define your own interface WITHOUT @noSelf:
+interface MyInventory {
+    getItemDetail(slot: number): ItemDetail;
+}
+// TSTL generates: inventory:getItemDetail(slot)
+// CC:Tweaked receives: getItemDetail(self, slot) -- WRONG!
+// Error: "bad argument #1 (number expected, got table)"
+```
+
+**Solution:** Use the global types from `craftos-types` (declared via tsconfig `types` array):
+```typescript
+// These types are globally available - no import needed!
+// InventoryPeripheral, WiredModemPeripheral, MonitorPeripheral, WriteFileHandle
+
+function wrapInventory(name: string): InventoryPeripheral {
+    return peripheral.wrap(name) as InventoryPeripheral;
+}
+```
+
+**Do NOT define custom peripheral interfaces in `src/types.ts`!**
+The `craftos-types` package uses `@noSelfInFile` annotation which tells TSTL to generate `.` calls.
+
+**Note:** These types are globally declared (via `declare class`), not module exports.
+You cannot import them - they are available automatically through the tsconfig `types` configuration.

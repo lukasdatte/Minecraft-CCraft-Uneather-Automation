@@ -1,12 +1,9 @@
 import { Result, ok, err } from "../core/result";
 import { log } from "../core/logger";
-import {
-    AppConfig,
-    UneartherInstance,
-    InventoryPeripheral,
-    MaterialId,
-} from "../types";
+import { AppConfig, UneartherInstance, MaterialId } from "../types";
 import { MaterialSelection } from "./scheduler";
+
+// Type InventoryPeripheral from @jackmacwindows/craftos-types is globally declared
 
 /**
  * Result of a transfer operation.

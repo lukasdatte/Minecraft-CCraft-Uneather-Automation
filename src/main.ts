@@ -150,15 +150,7 @@ function main(): void {
             }
         }
 
-        if (emptyUnearthers.length === 0) {
-            log.debug("No empty unearthers, waiting...");
-            sleep(CONFIG.system.scanIntervalSeconds);
-            continue;
-        }
-
-        log.info("Found empty unearthers", { count: emptyUnearthers.length });
-
-        // Phase 2: Get inventory contents
+        // Phase 2: Get inventory contents (needed for both processing and distribution)
         log.debug("Scanning material source...");
         const contentsRes = getInventoryContents(peripherals.materialSource);
 
@@ -173,7 +165,7 @@ function main(): void {
             uniqueItems: inventoryContents.size,
         });
 
-        // Phase 2.5: Process materials (before distributing to unearthers)
+        // Phase 2.5: Process materials (runs independently of unearthers)
         const processingRes = runProcessingPhase(
             CONFIG,
             peripherals.materialSource,
@@ -198,7 +190,16 @@ function main(): void {
             log.warn("Processing phase error", { code: processingRes.code });
         }
 
-        // Phase 3: Process empty unearthers
+        // Phase 3: Check for empty unearthers
+        if (emptyUnearthers.length === 0) {
+            log.debug("No empty unearthers, waiting...");
+            sleep(CONFIG.system.scanIntervalSeconds);
+            continue;
+        }
+
+        log.info("Found empty unearthers", { count: emptyUnearthers.length });
+
+        // Phase 4: Process empty unearthers
         const transfers = processEmptyUnearthers(
             CONFIG,
             peripherals.materialSource,
@@ -208,7 +209,7 @@ function main(): void {
             inventoryContents,
         );
 
-        // Phase 4: Update state
+        // Phase 5: Update state
         if (transfers.length > 0) {
             updateState(state, transfers);
             log.info("Transfers complete", {
@@ -219,7 +220,7 @@ function main(): void {
             log.debug("No transfers performed (materials unavailable or insufficient)");
         }
 
-        // Phase 5: Sleep until next scan
+        // Phase 6: Sleep until next scan
         const elapsed = (os.epoch("utc") - loopStart) / 1000;
         const sleepTime = math.max(0.1, CONFIG.system.scanIntervalSeconds - elapsed);
         log.debug("Loop complete", { elapsed: string.format("%.2f", elapsed), sleepTime });

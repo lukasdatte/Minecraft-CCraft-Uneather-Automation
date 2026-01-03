@@ -1,18 +1,14 @@
 import { Result, ok, err } from "../core/result";
 import { log } from "../core/logger";
-import {
-    AppConfig,
-    InventoryPeripheral,
-    MonitorPeripheral,
-    WiredModem,
-    Side,
-} from "../types";
+import { AppConfig, Side } from "../types";
+
+// Types from @jackmacwindows/craftos-types are globally declared (not module exports)
 
 /**
  * Validated peripheral registry with wrapped peripherals.
  */
 export interface ValidatedPeripherals {
-    modem: WiredModem;
+    modem: WiredModemPeripheral;
     materialSource: InventoryPeripheral;
     materialSourceName: string;
     monitor?: MonitorPeripheral;
@@ -23,14 +19,14 @@ export interface ValidatedPeripherals {
 /**
  * Get wired modem on the specified side.
  */
-function getWiredModem(side: Side): Result<WiredModem> {
+function getWiredModem(side: Side): Result<WiredModemPeripheral> {
     // peripheral.hasType checks if any of the types match (supports multi-type peripherals)
     if (!peripheral.hasType(side, "modem")) {
         const pType = peripheral.getType(side) as unknown as string | undefined;
         return err("ERR_MODEM_MISSING", { side, foundType: pType });
     }
 
-    const modem = peripheral.wrap(side) as WiredModem;
+    const modem = peripheral.wrap(side) as WiredModemPeripheral;
     if (!modem) {
         return err("ERR_MODEM_MISSING", { side });
     }
@@ -46,7 +42,7 @@ function getWiredModem(side: Side): Result<WiredModem> {
  * Check if a remote peripheral is present using getNamesRemote.
  * Workaround for isPresentRemote method call issues.
  */
-export function isRemotePresent(modem: WiredModem, name: string): boolean {
+export function isRemotePresent(modem: WiredModemPeripheral, name: string): boolean {
     const remotes = modem.getNamesRemote();
     for (const remote of remotes) {
         if (remote === name) {
@@ -59,7 +55,7 @@ export function isRemotePresent(modem: WiredModem, name: string): boolean {
 /**
  * Wrap a remote peripheral as an inventory.
  */
-function wrapInventory(modem: WiredModem, name: string): Result<InventoryPeripheral> {
+function wrapInventory(modem: WiredModemPeripheral, name: string): Result<InventoryPeripheral> {
     if (!isRemotePresent(modem, name)) {
         return err("ERR_PERIPHERAL_OFFLINE", { name });
     }
@@ -80,7 +76,7 @@ function wrapInventory(modem: WiredModem, name: string): Result<InventoryPeriphe
 /**
  * Wrap a remote monitor peripheral.
  */
-function wrapMonitor(modem: WiredModem, name: string): Result<MonitorPeripheral> {
+function wrapMonitor(modem: WiredModemPeripheral, name: string): Result<MonitorPeripheral> {
     if (!isRemotePresent(modem, name)) {
         return err("ERR_PERIPHERAL_OFFLINE", { name });
     }
@@ -215,7 +211,7 @@ export function validatePeripherals(config: AppConfig): Result<ValidatedPeripher
  * Call this during runtime when you need to interact with a specific chest.
  */
 export function wrapUneartherChest(
-    modem: WiredModem,
+    modem: WiredModemPeripheral,
     chestName: string,
 ): Result<InventoryPeripheral> {
     return wrapInventory(modem, chestName);

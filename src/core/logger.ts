@@ -1,4 +1,6 @@
-import { LogLevel, MonitorPeripheral, WriteHandle } from "../types";
+import { LogLevel } from "../types";
+
+// Types MonitorPeripheral, WriteFileHandle from @jackmacwindows/craftos-types are globally declared
 
 /** Format data for logging */
 function fmt(obj: unknown): string {
@@ -26,7 +28,7 @@ interface LoggerConfig {
     monitor?: MonitorPeripheral;
     monitorLines: string[];
     maxMonitorLines: number;
-    logFile?: WriteHandle;
+    logFile?: WriteFileHandle;
 }
 
 /** Global logger state (configured via initLogger) */
@@ -63,7 +65,7 @@ export function initLogger(
     if (logFilePath) {
         const [handle] = fs.open(logFilePath, "a");
         if (handle) {
-            loggerState.logFile = handle as unknown as WriteHandle;
+            loggerState.logFile = handle as unknown as WriteFileHandle;
             // Write restart marker (only once per program start)
             if (!restartMarkerWritten) {
                 loggerState.logFile.writeLine("");

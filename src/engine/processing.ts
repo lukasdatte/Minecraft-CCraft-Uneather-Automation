@@ -2,12 +2,13 @@ import { Result, ok, okNoop, err } from "../core/result";
 import { log } from "../core/logger";
 import {
     AppConfig,
-    InventoryPeripheral,
     ProcessingResult,
     InventoryItemInfo,
     STACK_SIZE,
 } from "../types";
 import { getInventoryContents } from "./scanner";
+
+// Type InventoryPeripheral from @jackmacwindows/craftos-types is globally declared
 
 /**
  * Check if processing chest has available space.
