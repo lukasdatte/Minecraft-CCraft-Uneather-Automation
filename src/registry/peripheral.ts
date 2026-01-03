@@ -24,9 +24,9 @@ export interface ValidatedPeripherals {
  * Get wired modem on the specified side.
  */
 function getWiredModem(side: Side): Result<WiredModem> {
-    // peripheral.getType returns the type as first value (TSTL quirk)
-    const pType = peripheral.getType(side) as unknown as string | undefined;
-    if (pType !== "modem") {
+    // peripheral.hasType checks if any of the types match (supports multi-type peripherals)
+    if (!peripheral.hasType(side, "modem")) {
+        const pType = peripheral.getType(side) as unknown as string | undefined;
         return err("ERR_MODEM_MISSING", { side, foundType: pType });
     }
 
@@ -43,10 +43,24 @@ function getWiredModem(side: Side): Result<WiredModem> {
 }
 
 /**
+ * Check if a remote peripheral is present using getNamesRemote.
+ * Workaround for isPresentRemote method call issues.
+ */
+export function isRemotePresent(modem: WiredModem, name: string): boolean {
+    const remotes = modem.getNamesRemote();
+    for (const remote of remotes) {
+        if (remote === name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Wrap a remote peripheral as an inventory.
  */
 function wrapInventory(modem: WiredModem, name: string): Result<InventoryPeripheral> {
-    if (!modem.isPresentRemote(name)) {
+    if (!isRemotePresent(modem, name)) {
         return err("ERR_PERIPHERAL_OFFLINE", { name });
     }
 
@@ -67,7 +81,7 @@ function wrapInventory(modem: WiredModem, name: string): Result<InventoryPeriphe
  * Wrap a remote monitor peripheral.
  */
 function wrapMonitor(modem: WiredModem, name: string): Result<MonitorPeripheral> {
-    if (!modem.isPresentRemote(name)) {
+    if (!isRemotePresent(modem, name)) {
         return err("ERR_PERIPHERAL_OFFLINE", { name });
     }
 

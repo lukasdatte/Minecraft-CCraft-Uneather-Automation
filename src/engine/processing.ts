@@ -4,7 +4,6 @@ import {
     AppConfig,
     InventoryPeripheral,
     ProcessingResult,
-    ItemDetail,
     InventoryItemInfo,
     STACK_SIZE,
 } from "../types";
@@ -107,11 +106,9 @@ function transferToProcessing(
     });
 
     // Verify slot still contains expected item (race condition protection)
-    const [detailSuccess, currentItem] = pcall(() =>
-        materialSource.getItemDetail(sourceSlot),
-    ) as LuaMultiReturn<[boolean, ItemDetail | null]>;
+    const currentItem = materialSource.getItemDetail(sourceSlot);
 
-    if (!detailSuccess || !currentItem || currentItem.name !== inputItemId) {
+    if (!currentItem || currentItem.name !== inputItemId) {
         log.warn("Slot content changed before processing transfer", {
             slot: sourceSlot,
             expected: inputItemId,
@@ -125,16 +122,14 @@ function transferToProcessing(
     }
 
     // Perform the transfer (exactly 1 stack = 64 items)
-    const [success, transferred] = pcall(() =>
-        materialSource.pushItems(
-            processingChestName,
-            sourceSlot,
-            STACK_SIZE,
-        ),
-    ) as LuaMultiReturn<[boolean, number]>;
+    const transferred = materialSource.pushItems(
+        processingChestName,
+        sourceSlot,
+        STACK_SIZE,
+    );
 
-    if (!success) {
-        log.error("Processing transfer failed (pushItems error)", {
+    if (transferred === 0) {
+        log.error("Processing transfer failed (no items transferred)", {
             input: inputItemId,
             sourceSlot,
         });

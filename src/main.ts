@@ -78,7 +78,7 @@ function main(): void {
     }
 
     // Initialize logger (without monitor for now)
-    initLogger(CONFIG.system.logLevel);
+    initLogger(CONFIG.system.logLevel, undefined, CONFIG.system.logFile);
 
     log.info("Boot sequence starting...");
 
@@ -97,7 +97,7 @@ function main(): void {
 
     // 2. Initialize logger with monitor if available
     if (peripherals.monitor) {
-        initLogger(CONFIG.system.logLevel, peripherals.monitor);
+        initLogger(CONFIG.system.logLevel, peripherals.monitor, CONFIG.system.logFile);
         log.info("Monitor connected");
     }
 

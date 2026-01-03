@@ -5,7 +5,6 @@ import {
     UneartherInstance,
     InventoryPeripheral,
     MaterialId,
-    ItemDetail,
 } from "../types";
 import { MaterialSelection } from "./scheduler";
 
@@ -49,11 +48,9 @@ export function transferToUnearther(
     });
 
     // Verify slot still contains expected item (race condition protection)
-    const [detailSuccess, currentItem] = pcall(() =>
-        materialSource.getItemDetail(selection.sourceSlot),
-    ) as LuaMultiReturn<[boolean, ItemDetail | null]>;
+    const currentItem = materialSource.getItemDetail(selection.sourceSlot);
 
-    if (!detailSuccess || !currentItem || currentItem.name !== selection.material.itemId) {
+    if (!currentItem || currentItem.name !== selection.material.itemId) {
         log.warn("Slot content changed before transfer", {
             slot: selection.sourceSlot,
             expected: selection.material.itemId,
@@ -67,16 +64,14 @@ export function transferToUnearther(
     }
 
     // Perform the transfer using pushItems
-    const [success, transferred] = pcall(() =>
-        materialSource.pushItems(
-            targetChestName,
-            selection.sourceSlot,
-            stackSize,
-        ),
-    ) as LuaMultiReturn<[boolean, number]>;
+    const transferred = materialSource.pushItems(
+        targetChestName,
+        selection.sourceSlot,
+        stackSize,
+    );
 
-    if (!success) {
-        log.error("Transfer failed (pushItems error)", {
+    if (transferred === 0) {
+        log.error("Transfer failed (no items transferred)", {
             unearther: unearther.id,
             material: selection.materialId,
         });

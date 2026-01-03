@@ -8,6 +8,7 @@ export type Side = "left" | "right" | "front" | "back" | "top" | "bottom";
 /** Supported peripheral types for type-safe wrapping */
 export type PeripheralType =
   | "drawer_controller"
+  | "inventory"
   | "chest"
   | "modem"
   | "monitor";
@@ -99,6 +100,8 @@ export interface SystemConfig {
     transferStackSize: number;
     /** Logging verbosity */
     logLevel: LogLevel;
+    /** Optional log file path for persistent logging */
+    logFile?: string;
 }
 
 // ============================================================
@@ -225,46 +228,58 @@ export interface ItemDetail {
     nbt?: string;
 }
 
-/** CC:Tweaked inventory peripheral interface */
+/** CC:Tweaked inventory peripheral interface (uses function-call syntax) */
 export interface InventoryPeripheral {
     /** List all items in the inventory */
-    list(): LuaTable<number, ItemDetail>;
+    list(this: void): LuaTable<number, ItemDetail>;
     /** Get the size of the inventory */
-    size(): number;
+    size(this: void): number;
     /** Push items to another inventory */
-    pushItems(toName: string, fromSlot: number, limit?: number, toSlot?: number): number;
+    pushItems(this: void, toName: string, fromSlot: number, limit?: number, toSlot?: number): number;
     /** Pull items from another inventory */
-    pullItems(fromName: string, fromSlot: number, limit?: number, toSlot?: number): number;
+    pullItems(this: void, fromName: string, fromSlot: number, limit?: number, toSlot?: number): number;
     /** Get detailed item info for a slot */
-    getItemDetail(slot: number): ItemDetail | null;
+    getItemDetail(this: void, slot: number): ItemDetail | null;
 }
 
-/** CC:Tweaked wired modem interface */
+/** CC:Tweaked wired modem interface (uses function-call syntax) */
 export interface WiredModem {
     /** Check if this is a wireless modem */
-    isWireless(): boolean;
+    isWireless(this: void): boolean;
     /** Get names of all remote peripherals */
-    getNamesRemote(): string[];
+    getNamesRemote(this: void): string[];
     /** Check if a remote peripheral is present */
-    isPresentRemote(name: string): boolean;
+    isPresentRemote(this: void, name: string): boolean;
     /** Get the local name of this modem on the network */
-    getNameLocal(): string;
+    getNameLocal(this: void): string;
 }
 
-/** CC:Tweaked monitor interface */
+/** CC:Tweaked monitor interface (uses function-call syntax) */
 export interface MonitorPeripheral {
     /** Write text at current cursor position */
-    write(text: string): void;
+    write(this: void, text: string): void;
     /** Clear the screen */
-    clear(): void;
+    clear(this: void): void;
     /** Set cursor position */
-    setCursorPos(x: number, y: number): void;
+    setCursorPos(this: void, x: number, y: number): void;
     /** Get monitor size */
-    getSize(): LuaMultiReturn<[number, number]>;
+    getSize(this: void): LuaMultiReturn<[number, number]>;
     /** Set text color */
-    setTextColor(color: number): void;
+    setTextColor(this: void, color: number): void;
     /** Set background color */
-    setBackgroundColor(color: number): void;
+    setBackgroundColor(this: void, color: number): void;
     /** Set text scale */
-    setTextScale(scale: number): void;
+    setTextScale(this: void, scale: number): void;
+}
+
+/** CC:Tweaked file write handle (uses function-call syntax) */
+export interface WriteHandle {
+    /** Write text without newline */
+    write(this: void, text: string): void;
+    /** Write text with newline */
+    writeLine(this: void, text: string): void;
+    /** Flush buffer to disk */
+    flush(this: void): void;
+    /** Close the file */
+    close(this: void): void;
 }

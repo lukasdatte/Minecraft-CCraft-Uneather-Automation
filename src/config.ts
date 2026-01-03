@@ -14,24 +14,24 @@ export const CONFIG: AppConfig = {
     // PERIPHERALS - Network devices
     // ============================================================
     peripherals: {
-    // Wired modem attached to the computer
+        // Wired modem attached to the computer
         modem: {
-            name: "left",  // Side where the wired modem is attached
+            name: "back",
             type: "modem",
         },
-        // Central material source (drawer controller or chest)
+        // Central material source (Functional Storage controller)
         materialSource: {
-            name: "storagedrawers:controller_0",  // Adjust to your peripheral name
-            type: "drawer_controller",
+            name: "functionalstorage:storage_controller_0",
+            type: "inventory",
         },
         // Optional: Status monitor for display
         // monitor: {
         //   name: "monitor_0",
         //   type: "monitor",
         // },
-        // Optional: Processing chest for material transformation chain
+        // Processing chest for material transformation chain (Hammer system)
         processingChest: {
-            name: "minecraft:chest_10",  // Adjust to your peripheral name
+            name: "minecraft:chest_4",
             type: "chest",
         },
     },
@@ -40,11 +40,23 @@ export const CONFIG: AppConfig = {
     // MATERIALS - What can be distributed
     // ============================================================
     materials: {
+        // Archaeologist materials
+        dirt: {
+            itemId: "minecraft:dirt",
+            minStock: 64,
+            weight: 0,
+        },
         sand: {
             itemId: "minecraft:sand",
-            minStock: 128,   // Keep at least 128 in storage
-            weight: 3,       // 3x more likely to be selected
+            minStock: 64,
+            weight: 1,
         },
+        dust: {
+            itemId: "ftbstuff:dust",
+            minStock: 64,
+            weight: 1,
+        },
+        // Geologist materials
         soul_sand: {
             itemId: "minecraft:soul_sand",
             minStock: 64,
@@ -53,61 +65,83 @@ export const CONFIG: AppConfig = {
         gravel: {
             itemId: "minecraft:gravel",
             minStock: 64,
+            weight: 2,
+        },
+        cobblestone: {
+            itemId: "minecraft:cobblestone",
+            minStock: 64,
             weight: 1,
         },
-    // Add more materials as needed:
-    // dust: {
-    //   itemId: "thermal:copper_dust",
-    //   minStock: 256,
-    //   weight: 2,
-    // },
+        crushed_kivi: {
+            itemId: "ftb:crushed_kivi",
+            minStock: 64,
+            weight: 1,
+        },
+        // Dimensionalist materials
+        otherrock: {
+            itemId: "occultism:otherrock",
+            minStock: 64,
+            weight: 1,
+        },
+        netherrack: {
+            itemId: "minecraft:netherrack",
+            minStock: 64,
+            weight: 1,
+        },
+        end_stone: {
+            itemId: "minecraft:end_stone",
+            minStock: 64,
+            weight: 1,
+        },
     },
 
     // ============================================================
-    // UNEARTHER TYPES - What each type can process
+    // UNEARTHER TYPES - Worker Token types and their materials
     // ============================================================
     uneartherTypes: {
-        brusher: {
-            // Brushers can process sand and gravel
-            supportedMaterials: ["sand", "gravel"],
+        archaeologist: {
+            // Archaeologist: Dirt, Sand, Dust
+            supportedMaterials: ["dirt", "sand", "dust"],
         },
-        soul_processor: {
-            // Soul processors only handle soul sand
-            supportedMaterials: ["soul_sand"],
+        geologist: {
+            // Geologist: Soul Sand, Gravel, Cobblestone, Crushed Kivi
+            supportedMaterials: ["soul_sand", "gravel", "cobblestone", "crushed_kivi"],
         },
-    // universal: {
-    //   supportedMaterials: ["sand", "soul_sand", "gravel", "dust"],
-    // },
+        dimensionalist: {
+            // Dimensionalist: Otherrock, Netherrack, Endstone
+            supportedMaterials: ["otherrock", "netherrack", "end_stone"],
+        },
     },
 
     // ============================================================
     // UNEARTHERS - Actual instances on the network
     // ============================================================
     unearthers: {
-        unearther_1: {
-            id: "unearther_1",
-            type: "brusher",
-            inputChest: "minecraft:chest_0",  // Adjust to your peripheral name
+        archaeologist_1: {
+            id: "archaeologist_1",
+            type: "archaeologist",
+            inputChest: "minecraft:chest_0",
         },
-        unearther_2: {
-            id: "unearther_2",
-            type: "soul_processor",
-            inputChest: "minecraft:chest_1",  // Adjust to your peripheral name
+        geologist_1: {
+            id: "geologist_1",
+            type: "geologist",
+            inputChest: "minecraft:chest_1",
         },
-        unearther_3: {
-            id: "unearther_3",
-            type: "brusher",
-            inputChest: "minecraft:chest_2",  // Adjust to your peripheral name
-        },
+        /*dimensionalist_1: {
+            id: "dimensionalist_1",
+            type: "dimensionalist",
+            inputChest: "minecraft:chest_2",  // Platzhalter - später hinzufügen
+        },*/
     },
 
     // ============================================================
     // SYSTEM - General settings
     // ============================================================
     system: {
-        scanIntervalSeconds: 2,    // How often to check unearthers
+        scanIntervalSeconds: 5,    // How often to check unearthers
         transferStackSize: 64,     // Items per transfer (full stack)
-        logLevel: "info",          // "debug" | "info" | "warn" | "error"
+        logLevel: "debug",          // "debug" | "info" | "warn" | "error"
+        logFile: "main.log",       // Log file path (optional)
     },
 
     // ============================================================
@@ -125,7 +159,7 @@ export const CONFIG: AppConfig = {
             "minecraft:cobblestone": "minecraft:dirt",
             "minecraft:dirt": "minecraft:gravel",
             "minecraft:gravel": "minecraft:sand",
-            "minecraft:sand": "exnihilo:dust",  // Adjust mod prefix as needed
+            "minecraft:sand": "ftbstuff:dust",
         },
     },
 };

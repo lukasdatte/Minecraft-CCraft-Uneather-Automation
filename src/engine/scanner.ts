@@ -1,12 +1,12 @@
 import { Result, ok, err } from "../core/result";
 import { log } from "../core/logger";
+import { isRemotePresent } from "../registry/peripheral";
 import {
     AppConfig,
     UneartherId,
     UneartherInstance,
     InventoryPeripheral,
     WiredModem,
-    ItemDetail,
     InventoryItemInfo,
 } from "../types";
 
@@ -50,8 +50,18 @@ function scanUnearther(
     modem: WiredModem,
     unearther: UneartherInstance,
 ): Result<UneartherScanResult> {
+    // Debug: verify inputChest is a string
+    if (type(unearther.inputChest) !== "string") {
+        log.error("scanUnearther received non-string inputChest", {
+            id: unearther.id,
+            chestType: type(unearther.inputChest),
+            chest: tostring(unearther.inputChest),
+        });
+        return err("ERR_CONFIG_INVALID", { id: unearther.id });
+    }
+
     // Check if chest is online
-    if (!modem.isPresentRemote(unearther.inputChest)) {
+    if (!isRemotePresent(modem, unearther.inputChest)) {
         log.warn("Unearther input chest offline", {
             id: unearther.id,
             chest: unearther.inputChest,
@@ -62,12 +72,10 @@ function scanUnearther(
         });
     }
 
-    // Wrap the chest
-    const [success, inv] = pcall(() =>
-        peripheral.wrap(unearther.inputChest),
-    ) as LuaMultiReturn<[boolean, InventoryPeripheral | null]>;
+    // Wrap the chest (already verified online via isRemotePresent)
+    const inv = peripheral.wrap(unearther.inputChest) as InventoryPeripheral | null;
 
-    if (!success || !inv) {
+    if (!inv) {
         log.warn("Failed to wrap unearther chest", { id: unearther.id });
         return err("ERR_SCAN_FAILED", { id: unearther.id });
     }
@@ -139,11 +147,9 @@ export function getInventoryContents(
 ): Result<Map<string, InventoryItemInfo>> {
     const contents = new Map<string, InventoryItemInfo>();
 
-    const [success, items] = pcall(() => inv.list()) as LuaMultiReturn<
-        [boolean, LuaTable<number, ItemDetail> | null]
-    >;
+    const items = inv.list();
 
-    if (!success || !items) {
+    if (!items) {
         return err("ERR_SCAN_FAILED");
     }
 

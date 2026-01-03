@@ -1,17 +1,15 @@
-import { LogLevel, MonitorPeripheral } from "../types";
+import { LogLevel, MonitorPeripheral, WriteHandle } from "../types";
 
 /** Format data for logging */
 function fmt(obj: unknown): string {
     if (obj === undefined || obj === null) return "";
-    return " " + textutils.serialize(obj);
+    const serialized = textutils.serialize(obj) as string;
+    return " " + serialized;
 }
 
-/** Get timestamp string */
+/** Get ISO 8601 UTC timestamp string */
 function timestamp(): string {
-    const time = os.time("local") as number;
-    const hours = math.floor(time);
-    const minutes = math.floor((time - hours) * 60);
-    return string.format("%02d:%02d", hours, minutes);
+    return os.date("!%Y-%m-%dT%H:%M:%SZ") as string;
 }
 
 /** Log level priorities (lower = more verbose) */
@@ -28,23 +26,55 @@ interface LoggerConfig {
     monitor?: MonitorPeripheral;
     monitorLines: string[];
     maxMonitorLines: number;
+    logFile?: WriteHandle;
 }
 
-/** Global logger state */
+/** Global logger state (configured via initLogger) */
 const loggerState: LoggerConfig = {
     level: "info",
     monitor: undefined,
     monitorLines: [],
     maxMonitorLines: 20,
+    logFile: undefined,
 };
+
+/** Track if restart marker was already written */
+let restartMarkerWritten = false;
 
 /**
  * Initialize the logger with configuration.
  */
-export function initLogger(level: LogLevel, monitor?: MonitorPeripheral): void {
+export function initLogger(
+    level: LogLevel,
+    monitor?: MonitorPeripheral,
+    logFilePath?: string,
+): void {
+    // Close existing log file if open
+    if (loggerState.logFile) {
+        loggerState.logFile.close();
+        loggerState.logFile = undefined;
+    }
+
     loggerState.level = level;
     loggerState.monitor = monitor;
     loggerState.monitorLines = [];
+
+    // Open log file if path provided
+    if (logFilePath) {
+        const [handle] = fs.open(logFilePath, "a");
+        if (handle) {
+            loggerState.logFile = handle as unknown as WriteHandle;
+            // Write restart marker (only once per program start)
+            if (!restartMarkerWritten) {
+                loggerState.logFile.writeLine("");
+                loggerState.logFile.writeLine("========================================");
+                loggerState.logFile.writeLine(`=== NEUSTART ${timestamp()} ===`);
+                loggerState.logFile.writeLine("========================================");
+                loggerState.logFile.flush();
+                restartMarkerWritten = true;
+            }
+        }
+    }
 
     if (monitor) {
         const [, height] = monitor.getSize();
@@ -59,6 +89,15 @@ export function initLogger(level: LogLevel, monitor?: MonitorPeripheral): void {
  */
 function shouldLog(level: LogLevel): boolean {
     return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[loggerState.level];
+}
+
+/**
+ * Write to log file if available.
+ */
+function writeToFile(line: string): void {
+    if (!loggerState.logFile) return;
+    loggerState.logFile.writeLine(line);
+    loggerState.logFile.flush();
 }
 
 /**
@@ -98,26 +137,34 @@ function writeToMonitor(prefix: string, msg: string): void {
 export const log = {
     debug: (msg: string, data?: unknown): void => {
         if (!shouldLog("debug")) return;
-        print(`[DBG ] ${timestamp()} ${msg}${fmt(data)}`);
+        const line = `[DBG ] ${timestamp()} ${msg}${fmt(data)}`;
+        print(line);
         writeToMonitor("[DBG]", msg);
+        writeToFile(line);
     },
 
     info: (msg: string, data?: unknown): void => {
         if (!shouldLog("info")) return;
-        print(`[INFO] ${timestamp()} ${msg}${fmt(data)}`);
+        const line = `[INFO] ${timestamp()} ${msg}${fmt(data)}`;
+        print(line);
         writeToMonitor("[INF]", msg);
+        writeToFile(line);
     },
 
     warn: (msg: string, data?: unknown): void => {
         if (!shouldLog("warn")) return;
-        print(`[WARN] ${timestamp()} ${msg}${fmt(data)}`);
+        const line = `[WARN] ${timestamp()} ${msg}${fmt(data)}`;
+        print(line);
         writeToMonitor("[WRN]", msg);
+        writeToFile(line);
     },
 
     error: (msg: string, data?: unknown): void => {
         if (!shouldLog("error")) return;
-        print(`[ERR ] ${timestamp()} ${msg}${fmt(data)}`);
+        const line = `[ERR ] ${timestamp()} ${msg}${fmt(data)}`;
+        print(line);
         writeToMonitor("[ERR]", msg);
+        writeToFile(line);
     },
 };
 
