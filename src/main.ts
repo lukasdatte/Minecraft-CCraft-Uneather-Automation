@@ -1,11 +1,11 @@
 import { CONFIG } from "./config";
-import { log, initLogger } from "./core/logger";
+import { Logger } from "./core/logger";
 import { printStartupDiagnostics } from "./core/diagnostics";
-import { validatePeripherals, ValidatedPeripherals } from "./registry/peripheral";
-import { scanAllUnearthers, getInventoryContents } from "./engine/scanner";
-import { createScheduler, WeightedScheduler } from "./engine/scheduler";
-import { processEmptyUnearthers, TransferResult } from "./engine/transfer";
-import { runProcessingPhase } from "./engine/processing";
+import { PeripheralRegistry, ValidatedPeripherals } from "./registry/peripheral";
+import { Scanner } from "./engine/scanner";
+import { Scheduler } from "./engine/scheduler";
+import { TransferEngine, TransferResult } from "./engine/transfer";
+import { ProcessingEngine } from "./engine/processing";
 import { AppState, ProcessingResult } from "./types";
 
 /**
@@ -77,14 +77,20 @@ function main(): void {
         return;
     }
 
-    // Initialize logger (without monitor for now)
-    initLogger(CONFIG.system.logLevel, undefined, CONFIG.system.logFile);
+    // 1. Create Logger (no dependencies)
+    const log = new Logger({
+        level: CONFIG.system.logLevel,
+        logFile: CONFIG.system.logFile,
+    });
 
     log.info("Boot sequence starting...");
 
-    // 1. Validate all peripherals
+    // 2. Create PeripheralRegistry (needs: Logger)
+    const peripheralRegistry = new PeripheralRegistry(log);
+
+    // 3. Validate all peripherals
     log.info("Phase 1: Validating peripherals...");
-    const peripheralsRes = validatePeripherals(CONFIG);
+    const peripheralsRes = peripheralRegistry.validate(CONFIG);
     if (!peripheralsRes.ok) {
         log.error("Failed to validate peripherals", {
             code: peripheralsRes.code,
@@ -95,21 +101,30 @@ function main(): void {
     const peripherals: ValidatedPeripherals = peripheralsRes.value;
     log.info("Peripherals validated successfully");
 
-    // 2. Initialize logger with monitor if available
+    // 4. Set monitor on logger if available
     if (peripherals.monitor) {
-        initLogger(CONFIG.system.logLevel, peripherals.monitor, CONFIG.system.logFile);
+        log.setMonitor(peripherals.monitor);
         log.info("Monitor connected");
     }
 
-    // 3. Create scheduler
-    const scheduler: WeightedScheduler = createScheduler(CONFIG);
+    // 5. Create Scanner (needs: PeripheralRegistry, Logger)
+    const scanner = new Scanner(peripheralRegistry, log);
+
+    // 6. Create Scheduler (needs: Config, Logger)
+    const scheduler = new Scheduler(CONFIG, log);
     log.info("Scheduler initialized");
 
-    // 4. Create initial state
+    // 7. Create TransferEngine (needs: Logger)
+    const transferEngine = new TransferEngine(log);
+
+    // 8. Create ProcessingEngine (needs: Scanner, Logger)
+    const processingEngine = new ProcessingEngine(scanner, log);
+
+    // 9. Create initial state
     const state = createInitialState();
     log.info("State initialized");
 
-    // 5. Log configuration summary
+    // 10. Log configuration summary
     log.info("Configuration summary", {
         unearthers: Object.keys(CONFIG.unearthers).length,
         materials: Object.keys(CONFIG.materials).length,
@@ -132,7 +147,7 @@ function main(): void {
 
         // Phase 1: Scan all unearthers
         log.debug("Scanning unearthers...");
-        const scanRes = scanAllUnearthers(CONFIG, peripherals.modem);
+        const scanRes = scanner.scanAllUnearthers(CONFIG, peripherals.modem);
 
         if (!scanRes.ok) {
             log.error("Scan failed", { code: scanRes.code });
@@ -152,7 +167,7 @@ function main(): void {
 
         // Phase 2: Get inventory contents (needed for both processing and distribution)
         log.debug("Scanning material source...");
-        const contentsRes = getInventoryContents(peripherals.materialSource);
+        const contentsRes = scanner.getInventoryContents(peripherals.materialSource);
 
         if (!contentsRes.ok) {
             log.error("Failed to scan material source", { code: contentsRes.code });
@@ -166,7 +181,7 @@ function main(): void {
         });
 
         // Phase 2.5: Process materials (runs independently of unearthers)
-        const processingRes = runProcessingPhase(
+        const processingRes = processingEngine.runPhase(
             CONFIG,
             peripherals.materialSource,
             peripherals.processingChest,
@@ -181,7 +196,7 @@ function main(): void {
             });
 
             // Re-scan inventory after processing (contents may have changed)
-            const updatedContentsRes = getInventoryContents(peripherals.materialSource);
+            const updatedContentsRes = scanner.getInventoryContents(peripherals.materialSource);
             if (updatedContentsRes.ok) {
                 inventoryContents = updatedContentsRes.value;
             }
@@ -200,7 +215,7 @@ function main(): void {
         log.info("Found empty unearthers", { count: emptyUnearthers.length });
 
         // Phase 4: Process empty unearthers
-        const transfers = processEmptyUnearthers(
+        const transfers = transferEngine.processEmptyUnearthers(
             CONFIG,
             peripherals.materialSource,
             emptyUnearthers,

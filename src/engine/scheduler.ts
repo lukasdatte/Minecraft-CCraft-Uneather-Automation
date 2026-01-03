@@ -1,4 +1,4 @@
-import { log } from "../core/logger";
+import { Logger } from "../core/logger";
 import {
     AppConfig,
     MaterialId,
@@ -36,26 +36,29 @@ interface AvailableMaterial {
  * - Respects minimum stock levels
  * - Only selects from materials the unearther can process
  */
-export class WeightedScheduler {
-    constructor(private config: AppConfig) {}
+export class Scheduler {
+    constructor(
+        private config: AppConfig,
+        private log: Logger,
+    ) {}
 
     /**
-   * Select a material for an unearther based on weighted probability.
-   *
-   * @param unearther - The unearther instance needing material
-   * @param inventoryContents - Current inventory contents (itemId -> {totalCount, slots})
-   * @param stackSize - How many items will be transferred
-   * @returns Selected material or null if none available
-   */
+     * Select a material for an unearther based on weighted probability.
+     *
+     * @param unearther - The unearther instance needing material
+     * @param inventoryContents - Current inventory contents (itemId -> {totalCount, slots})
+     * @param stackSize - How many items will be transferred
+     * @returns Selected material or null if none available
+     */
     selectMaterial(
         unearther: UneartherInstance,
         inventoryContents: Map<string, { totalCount: number; slots: number[] }>,
         stackSize: number,
     ): MaterialSelection | null {
-    // Get unearther type and supported materials
+        // Get unearther type and supported materials
         const uType = this.config.uneartherTypes[unearther.type];
         if (!uType) {
-            log.error("Unknown unearther type", { type: unearther.type });
+            this.log.error("Unknown unearther type", { type: unearther.type });
             return null;
         }
 
@@ -65,7 +68,7 @@ export class WeightedScheduler {
         for (const matId of uType.supportedMaterials) {
             const matConfig = this.config.materials[matId];
             if (!matConfig) {
-                log.warn("Unknown material in type definition", {
+                this.log.warn("Unknown material in type definition", {
                     type: unearther.type,
                     material: matId,
                 });
@@ -75,14 +78,14 @@ export class WeightedScheduler {
             // Check inventory for this item
             const invEntry = inventoryContents.get(matConfig.itemId);
             if (!invEntry) {
-                log.debug("Material not in inventory", { material: matId });
+                this.log.debug("Material not in inventory", { material: matId });
                 continue;
             }
 
             // Check if we have enough (minStock + stackSize)
             const required = matConfig.minStock + stackSize;
             if (invEntry.totalCount < required) {
-                log.debug("Insufficient stock for material", {
+                this.log.debug("Insufficient stock for material", {
                     material: matId,
                     have: invEntry.totalCount,
                     required,
@@ -99,7 +102,7 @@ export class WeightedScheduler {
         }
 
         if (available.length === 0) {
-            log.warn("No materials available for unearther", {
+            this.log.warn("No materials available for unearther", {
                 id: unearther.id,
                 type: unearther.type,
             });
@@ -112,7 +115,7 @@ export class WeightedScheduler {
             return null;
         }
 
-        log.debug("Selected material for unearther", {
+        this.log.debug("Selected material for unearther", {
             unearther: unearther.id,
             material: selected.materialId,
             weight: selected.config.weight,
@@ -121,14 +124,34 @@ export class WeightedScheduler {
         return {
             materialId: selected.materialId,
             material: selected.config,
-            sourceSlot: selected.slots[0], // Use first available slot
+            sourceSlot: selected.slots[0],
         };
     }
 
     /**
-   * Perform weighted random selection.
-   * Higher weight = higher probability of selection.
-   */
+     * Get supported materials for an unearther.
+     */
+    getSupportedMaterials(unearther: UneartherInstance): MaterialId[] {
+        const uType = this.config.uneartherTypes[unearther.type];
+        return uType ? uType.supportedMaterials : [];
+    }
+
+    /**
+     * Check if a material can be used by an unearther.
+     */
+    canProcessMaterial(unearther: UneartherInstance, materialId: MaterialId): boolean {
+        const supported = this.getSupportedMaterials(unearther);
+        return supported.includes(materialId);
+    }
+
+    // ========================================
+    // Private methods
+    // ========================================
+
+    /**
+     * Perform weighted random selection.
+     * Higher weight = higher probability of selection.
+     */
     private weightedSelect(materials: AvailableMaterial[]): AvailableMaterial | null {
         if (materials.length === 0) return null;
         if (materials.length === 1) return materials[0];
@@ -154,27 +177,4 @@ export class WeightedScheduler {
         // Fallback (should not reach here)
         return materials[0];
     }
-
-    /**
-   * Get supported materials for an unearther.
-   */
-    getSupportedMaterials(unearther: UneartherInstance): MaterialId[] {
-        const uType = this.config.uneartherTypes[unearther.type];
-        return uType ? uType.supportedMaterials : [];
-    }
-
-    /**
-   * Check if a material can be used by an unearther.
-   */
-    canProcessMaterial(unearther: UneartherInstance, materialId: MaterialId): boolean {
-        const supported = this.getSupportedMaterials(unearther);
-        return supported.includes(materialId);
-    }
-}
-
-/**
- * Create a new weighted scheduler.
- */
-export function createScheduler(config: AppConfig): WeightedScheduler {
-    return new WeightedScheduler(config);
 }
