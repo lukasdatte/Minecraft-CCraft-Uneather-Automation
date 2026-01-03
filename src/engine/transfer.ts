@@ -45,6 +45,9 @@ export class TransferEngine {
             amount: stackSize,
         });
 
+        // Ensure connected before transfer
+        materialSource.ensureConnected();
+
         // Batch call: verify slot content and transfer atomically
         type TransferCallResult =
             | { error: "slot_changed"; actual: string | undefined }

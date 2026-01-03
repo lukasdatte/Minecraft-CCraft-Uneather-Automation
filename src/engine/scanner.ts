@@ -90,6 +90,8 @@ export class Scanner {
     ): Result<Map<string, InventoryItemInfo>> {
         const contents = new Map<string, InventoryItemInfo>();
 
+        // Ensure connected before operation
+        inv.ensureConnected();
         const items = inv.call((p) => p.list(), undefined);
 
         if (!items) {
@@ -144,6 +146,8 @@ export class Scanner {
             });
         }
 
+        // Ensure connected before scanning
+        safeInv.ensureConnected();
         const isEmptyRes = this.isInventoryEmpty(safeInv);
         if (!isEmptyRes.ok) {
             return err(isEmptyRes.code as ErrorCode, { id: unearther.id });

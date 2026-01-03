@@ -4,7 +4,9 @@ import { Result, ok, err } from "./result";
 /**
  * Generic wrapper for any CC:Tweaked peripheral that provides:
  * - Try/catch around all operations
- * - Automatic re-wrap after disconnect/reconnect (lazy recovery)
+ * - Explicit connection check and reconnect via ensureConnected()
+ *
+ * NO automatic retry - caller controls when to reconnect.
  *
  * @template T - The peripheral type (InventoryPeripheral, MonitorPeripheral, etc.)
  */
@@ -22,6 +24,7 @@ export class SafePeripheral<T> {
 
     /**
      * Check if peripheral is connected to the wired network.
+     * Performs actual check via modem.getNamesRemote().
      */
     isConnected(): boolean {
         try {
@@ -37,43 +40,33 @@ export class SafePeripheral<T> {
     }
 
     /**
-     * Try to re-wrap the peripheral after disconnect/reconnect.
-     * Returns true if successful.
+     * Ensure peripheral is connected. If not, try to reconnect.
+     * Caller should call this BEFORE critical operations.
+     *
+     * @returns true if connected (or successfully reconnected), false otherwise
      */
-    private tryReconnect(): boolean {
-        try {
-            const raw = peripheral.wrap(this.peripheralName) as T | undefined;
-            if (raw) {
-                this.wrappedPeripheral = raw;
-                this.log.info("Peripheral reconnected", { name: this.peripheralName });
-                return true;
-            }
-        } catch {
-            // Wrap failed
+    ensureConnected(): boolean {
+        // Actual connection check via modem
+        if (this.isConnected()) {
+            return true;
         }
-        return false;
+
+        // Not connected - try to reconnect
+        return this.tryReconnect();
     }
 
     /**
-     * Execute an operation with try/catch and automatic reconnect retry.
+     * Execute an operation with try/catch protection.
+     * NO automatic reconnect - caller should call ensureConnected() before if needed.
      *
      * @param operation - Function that receives the peripheral and returns a value
      * @param fallback - Value to return if operation fails
      * @returns The operation result, or fallback on failure
      */
     call<R>(operation: (p: T) => R, fallback: R): R {
-        // First attempt
         try {
             return operation(this.wrappedPeripheral);
         } catch (e) {
-            // Try to reconnect and retry once
-            if (this.tryReconnect()) {
-                try {
-                    return operation(this.wrappedPeripheral);
-                } catch {
-                    // Still failed after re-wrap
-                }
-            }
             this.log.warn("Peripheral operation failed", {
                 name: this.peripheralName,
                 error: String(e),
@@ -83,25 +76,17 @@ export class SafePeripheral<T> {
     }
 
     /**
-     * Execute an operation with try/catch and automatic reconnect retry.
+     * Execute an operation with try/catch protection.
      * Returns Result for explicit error handling.
+     * NO automatic reconnect - caller should call ensureConnected() before if needed.
      *
      * @param operation - Function that receives the peripheral and returns a value
      * @returns Result with the value on success, or error on failure
      */
     tryCall<R>(operation: (p: T) => R): Result<R> {
-        // First attempt
         try {
             return ok(operation(this.wrappedPeripheral));
         } catch (e) {
-            // Try to reconnect and retry once
-            if (this.tryReconnect()) {
-                try {
-                    return ok(operation(this.wrappedPeripheral));
-                } catch {
-                    // Still failed after re-wrap
-                }
-            }
             return err("ERR_PERIPHERAL_DISCONNECTED", {
                 name: this.peripheralName,
                 error: String(e),
@@ -122,6 +107,28 @@ export class SafePeripheral<T> {
      */
     unwrap(): T {
         return this.wrappedPeripheral;
+    }
+
+    // ========================================
+    // Private methods
+    // ========================================
+
+    /**
+     * Try to re-wrap the peripheral after disconnect/reconnect.
+     * Returns true if successful.
+     */
+    private tryReconnect(): boolean {
+        try {
+            const raw = peripheral.wrap(this.peripheralName) as T | undefined;
+            if (raw) {
+                this.wrappedPeripheral = raw;
+                this.log.info("Peripheral reconnected", { name: this.peripheralName });
+                return true;
+            }
+        } catch {
+            // Wrap failed
+        }
+        return false;
     }
 }
 

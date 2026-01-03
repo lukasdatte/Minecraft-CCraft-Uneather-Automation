@@ -73,44 +73,49 @@ Output: `dist/main.lua` (bundled entry point for CC:Tweaked).
 CC:Tweaked peripherals can disconnect at runtime. Wrapped peripheral objects become stale after disconnect/reconnect. `SafePeripheral<T>` provides resilience:
 
 - **Try/catch** around all operations (compiles to Lua `pcall`)
-- **Lazy re-wrap**: On failure, automatically tries `peripheral.wrap()` and retries once
+- **Caller-controlled reconnect** via explicit `ensureConnected()` call
+- **NO automatic retry** - prevents double transfers on partial failures
 
 **Methods:**
-- `call(op, fallback)` - Execute with auto-reconnect, return fallback on error
-- `tryCall(op)` - Execute with auto-reconnect, return `Result<T>`
-- `isConnected()` - Check connectivity via modem (optional, separate from call)
+- `ensureConnected()` - Real connection check via modem + reconnect if needed (caller calls this!)
+- `isConnected()` - Check connectivity via modem (no reconnect)
+- `call(op, fallback)` - Execute with try/catch, return fallback on error
+- `tryCall(op)` - Execute with try/catch, return `Result<T>`
 - `getName()` - Peripheral name for `pushItems`, logging
 
-**Pattern - simple operation:**
+**Pattern - with explicit reconnect:**
 ```typescript
+// Caller decides when to check/reconnect
+inv.ensureConnected();
 const items = inv.call(p => p.list(), undefined);
 if (!items) return err("ERR_SCAN_FAILED");
 ```
 
 **Pattern - batch operation (multiple calls in one):**
 ```typescript
-const result = inv.call(p => {
+// Reconnect once before the batch
+materialSource.ensureConnected();
+const result = materialSource.call(p => {
     const currentItem = p.getItemDetail(slot);
     if (!currentItem || currentItem.name !== expectedItem) {
-        return { error: "slot_changed" as const };
+        return { error: "slot_changed" };
     }
     const transferred = p.pushItems(target, slot, amount);
     if (transferred === 0) {
-        return { error: "transfer_failed" as const };
+        return { error: "transfer_failed" };
     }
     return { transferred };
-}, { error: "disconnected" as const });
+}, { error: "disconnected" });
 
 if ("error" in result) {
     // Handle specific error...
 }
 ```
 
-**Lazy Re-Wrap Behavior:**
-1. Operation executed on cached peripheral
-2. On exception: `peripheral.wrap()` called to get fresh reference
-3. On success: Operation retried once with new reference
-4. On second failure: Fallback/error returned
+**Why no automatic retry:**
+- `pushItems()` is not idempotent - retry could transfer items twice
+- Loop-based system naturally retries on next iteration with fresh state
+- Caller has full control over reconnect timing
 
 ## TSTL Specifics
 

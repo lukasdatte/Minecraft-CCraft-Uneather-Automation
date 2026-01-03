@@ -78,7 +78,7 @@ export class ProcessingEngine {
             return results;
         }
 
-        // Get current inventory state via Scanner
+        // Get current inventory state via Scanner (ensureConnected inside)
         const inventoryRes = this.scanner.getInventoryContents(materialSource);
         if (!inventoryRes.ok) {
             this.log.warn("Failed to get inventory contents for processing");
@@ -86,7 +86,8 @@ export class ProcessingEngine {
         }
         const inventoryContents = inventoryRes.value;
 
-        // Get processing chest contents once (reused for all materials)
+        // Ensure processing chest is connected before operations
+        processingChest.ensureConnected();
         const chestContents = processingChest.call((p) => p.list(), undefined);
         if (!chestContents) {
             this.log.warn("Processing chest disconnected");
@@ -267,6 +268,9 @@ export class ProcessingEngine {
             sourceSlot,
             target: processingChestName,
         });
+
+        // Ensure connected before transfer
+        materialSource.ensureConnected();
 
         // Batch call: verify slot content and transfer atomically
         type TransferCallResult =

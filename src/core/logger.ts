@@ -134,7 +134,8 @@ export class Logger {
             this.monitorLines.shift();
         }
 
-        // Redraw monitor with batch call (silent fail on disconnect)
+        // Ensure connected before output, then redraw (silent fail on disconnect)
+        this.monitor.ensureConnected();
         const linesToDraw = this.monitorLines;
         this.monitor.call(
             (m) => {
