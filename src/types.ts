@@ -21,18 +21,6 @@ export interface PeripheralConfig {
     type: PeripheralType;
 }
 
-/** Central peripheral registry */
-export interface PeripheralRegistry {
-    /** Wired modem on the computer (side name like "left", "right", etc.) */
-    modem: PeripheralConfig;
-    /** Central material source (drawer controller or chest) */
-    materialSource: PeripheralConfig;
-    /** Optional status monitor */
-    monitor?: PeripheralConfig;
-    /** Optional processing chest for material transformation chain */
-    processingChest?: PeripheralConfig;
-}
-
 // ============================================================
 // MATERIAL TYPES
 // ============================================================
@@ -96,8 +84,6 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 export interface SystemConfig {
     /** How often to scan unearthers (in seconds) */
     scanIntervalSeconds: number;
-    /** Items per transfer (typically 64 for full stack) */
-    transferStackSize: number;
     /** Logging verbosity */
     logLevel: LogLevel;
     /** Optional log file path for persistent logging */
@@ -151,23 +137,145 @@ export interface ProcessingResult {
 }
 
 // ============================================================
+// TASK-SPECIFIC CONFIGS
+// ============================================================
+
+/**
+ * Configuration for the Hammering Task.
+ * Controls material processing (Cobblestone → Dirt → ...).
+ */
+export interface HammeringConfig {
+    /** Task enabled? */
+    enabled: boolean;
+
+    /** Processing chest peripheral name */
+    processingChest: PeripheralConfig;
+
+    /** Minimum items to keep in reserve */
+    minInputReserve: number;
+
+    /** Maximum output before stopping */
+    maxOutputStock: number;
+
+    /** Processing chain: inputItemId → outputItemId */
+    chain: ProcessingChain;
+}
+
+/**
+ * Configuration for the Unearthing Task.
+ * Controls material distribution to unearthers.
+ */
+export interface UnearthingConfig {
+    /** Task enabled? */
+    enabled: boolean;
+
+    /** Material definitions */
+    materials: MaterialRegistry;
+
+    /** Unearther type definitions */
+    uneartherTypes: UneartherTypeRegistry;
+
+    /** Unearther instances */
+    unearthers: UneartherRegistry;
+
+    /** Items per transfer */
+    transferStackSize: number;
+}
+
+/**
+ * Container for all task configurations.
+ */
+export interface TaskConfigs {
+    /** Hammering task (material processing) */
+    hammering: HammeringConfig;
+
+    /** Unearthing task (material distribution) */
+    unearthing: UnearthingConfig;
+}
+
+// ============================================================
+// TASK-SPECIFIC STATES
+// ============================================================
+
+/**
+ * Runtime state for Hammering Task.
+ */
+export interface HammeringState {
+    /** Number of processing operations since start */
+    totalOperations: number;
+
+    /** Last processing timestamp */
+    lastProcessingTime: number;
+}
+
+/**
+ * Runtime state for Unearthing Task.
+ */
+export interface UnearthingState {
+    /** Status of each unearther */
+    uneartherStatus: Record<string, {
+        isEmpty: boolean;
+        lastMaterial?: string;
+        lastTransferTime?: number;
+    }>;
+
+    /** Number of transfers since start */
+    totalTransfers: number;
+}
+
+// ============================================================
+// GLOBAL PERIPHERAL REGISTRY (for task-based config)
+// ============================================================
+
+/**
+ * Global peripherals shared by all tasks.
+ * Task-specific peripherals (like processingChest) are in task configs.
+ */
+export interface GlobalPeripheralRegistry {
+    /** Wired modem on the computer (side name) */
+    modem: PeripheralConfig;
+    /** Central material source (drawer controller or chest) */
+    materialSource: PeripheralConfig;
+    /** Optional status monitor */
+    monitor?: PeripheralConfig;
+}
+
+// ============================================================
 // APP CONFIG (ROOT)
 // ============================================================
 
 /** Complete application configuration */
 export interface AppConfig {
-    /** Peripheral registry */
-    peripherals: PeripheralRegistry;
-    /** Material definitions */
-    materials: MaterialRegistry;
-    /** Unearther type definitions */
-    uneartherTypes: UneartherTypeRegistry;
-    /** Unearther instances */
-    unearthers: UneartherRegistry;
+    /** Global peripherals (shared by all tasks) */
+    peripherals: GlobalPeripheralRegistry;
+
     /** System settings */
     system: SystemConfig;
-    /** Optional processing configuration for material transformation */
-    processing?: ProcessingConfig;
+
+    /** Task-specific configurations */
+    tasks: TaskConfigs;
+}
+
+// ============================================================
+// LEGACY TYPES (for compatibility during migration)
+// ============================================================
+
+/**
+ * @deprecated Use GlobalPeripheralRegistry instead.
+ * Kept for backwards compatibility with PeripheralRegistry class.
+ */
+export type PeripheralRegistryConfig = PeripheralRegistry;
+
+/** Legacy peripheral registry with optional processing chest */
+export interface PeripheralRegistry {
+    /** Wired modem on the computer (side name like "left", "right", etc.) */
+    modem: PeripheralConfig;
+    /** Central material source (drawer controller or chest) */
+    materialSource: PeripheralConfig;
+    /** Optional status monitor */
+    monitor?: PeripheralConfig;
+    /** Optional processing chest for material transformation chain */
+    processingChest?: PeripheralConfig;
 }
 
 // ============================================================

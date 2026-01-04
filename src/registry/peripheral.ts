@@ -58,7 +58,7 @@ export class PeripheralRegistry {
 
         // 4. Validate and wrap all unearther input chests
         const uneartherChests = new Map<string, SafePeripheral<InventoryPeripheral>>();
-        for (const [id, unearther] of Object.entries(config.unearthers)) {
+        for (const [id, unearther] of Object.entries(config.tasks.unearthing.unearthers)) {
             const chestRes = this.validateInventory(modem, unearther.inputChest);
             if (!chestRes.ok) {
                 this.log.warn("Unearther chest not available at boot", {
@@ -96,8 +96,8 @@ export class PeripheralRegistry {
 
         // 6. Validate processing chest (optional, wrapped in SafePeripheral)
         let processingChest: SafePeripheral<InventoryPeripheral> | undefined;
-        if (config.peripherals.processingChest && config.processing?.enabled) {
-            const processingChestName = config.peripherals.processingChest.name;
+        if (config.tasks.hammering.enabled && config.tasks.hammering.processingChest) {
+            const processingChestName = config.tasks.hammering.processingChest.name;
             const processingChestRes = this.validateInventory(modem, processingChestName);
             if (processingChestRes.ok) {
                 processingChest = processingChestRes.value;
@@ -111,15 +111,16 @@ export class PeripheralRegistry {
         }
 
         // 7. Validate config consistency (unearther types exist, materials exist)
-        for (const [id, unearther] of Object.entries(config.unearthers)) {
-            const uType = config.uneartherTypes[unearther.type];
+        const unearthingConfig = config.tasks.unearthing;
+        for (const [id, unearther] of Object.entries(unearthingConfig.unearthers)) {
+            const uType = unearthingConfig.uneartherTypes[unearther.type];
             if (!uType) {
                 this.log.error("Unknown unearther type", { id, type: unearther.type });
                 return err("ERR_UNKNOWN_UNEARTHER_TYPE", { id, type: unearther.type });
             }
 
             for (const matId of uType.supportedMaterials) {
-                if (!config.materials[matId]) {
+                if (!unearthingConfig.materials[matId]) {
                     this.log.error("Unknown material in unearther type", {
                         uneartherType: unearther.type,
                         material: matId,

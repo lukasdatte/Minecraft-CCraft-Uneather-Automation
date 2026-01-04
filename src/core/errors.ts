@@ -41,6 +41,9 @@ export type ResultCode =
   | "ERR_INPUT_BELOW_RESERVE"
   | "ERR_OUTPUT_AT_MAX"
 
+  // Scheduling errors
+  | "ERR_NO_MATERIAL_AVAILABLE"
+
   // General errors
   | "ERR_IO";
 
@@ -79,6 +82,8 @@ export const ERROR_MESSAGES: Record<ResultCode, string> = {
     ERR_PROCESSING_CHEST_FULL: "Processing chest has no available space",
     ERR_INPUT_BELOW_RESERVE: "Input material would go below minimum reserve",
     ERR_OUTPUT_AT_MAX: "Output material already at or above maximum stock",
+
+    ERR_NO_MATERIAL_AVAILABLE: "No suitable material available for this unearther",
 
     ERR_IO: "I/O error",
 };

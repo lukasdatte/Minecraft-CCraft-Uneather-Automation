@@ -1,15 +1,27 @@
-import { Result, ok, okNoop, err } from "../core/result";
+import { Result, ok, err } from "../core/result";
 import { Logger } from "../core/logger";
 import { SafePeripheral } from "../core/safe-peripheral";
 import { Scanner } from "./scanner";
 import {
-    AppConfig,
     ProcessingResult,
+    ProcessingChain,
     InventoryItemInfo,
     STACK_SIZE,
 } from "../types";
 
 // Type InventoryPeripheral from @jackmacwindows/craftos-types is globally declared
+
+/**
+ * Configuration for a processing phase.
+ */
+export interface ProcessingPhaseConfig {
+    /** Minimum items to keep in reserve */
+    minInputReserve: number;
+    /** Maximum output before stopping */
+    maxOutputStock: number;
+    /** Processing chain: inputItemId → outputItemId */
+    chain: ProcessingChain;
+}
 
 /**
  * Engine for material processing (hammer chain: Cobblestone → Dirt → Gravel → Sand → Dust).
@@ -22,24 +34,17 @@ export class ProcessingEngine {
 
     /**
      * Run the complete processing phase.
-     * This is the main entry point called from main.ts.
+     * This is the main entry point called from tasks.
+     *
+     * @param config - Processing phase configuration
+     * @param materialSource - Material source peripheral
+     * @param processingChest - Processing chest peripheral
      */
     runPhase(
-        config: AppConfig,
+        config: ProcessingPhaseConfig,
         materialSource: SafePeripheral<InventoryPeripheral>,
-        processingChest: SafePeripheral<InventoryPeripheral> | undefined,
+        processingChest: SafePeripheral<InventoryPeripheral>,
     ): Result<ProcessingResult[]> {
-        // Guard: Check if processing is configured
-        if (!config.processing || !config.processing.enabled) {
-            return okNoop([]);
-        }
-
-        // Guard: Check if processing chest is available
-        if (!processingChest) {
-            this.log.warn("Processing enabled but processing chest not available");
-            return err("ERR_PROCESSING_CHEST_MISSING");
-        }
-
         this.log.debug("Starting processing phase...");
 
         const results = this.processAllMaterials(
@@ -65,18 +70,11 @@ export class ProcessingEngine {
      * Process all eligible materials in the chain.
      */
     private processAllMaterials(
-        config: AppConfig,
+        config: ProcessingPhaseConfig,
         materialSource: SafePeripheral<InventoryPeripheral>,
         processingChest: SafePeripheral<InventoryPeripheral>,
     ): ProcessingResult[] {
         const results: ProcessingResult[] = [];
-        const processing = config.processing;
-
-        // Guard: processing must be configured and enabled
-        if (!processing || !processing.enabled) {
-            this.log.debug("Processing disabled or not configured");
-            return results;
-        }
 
         // Get current inventory state via Scanner (ensureConnected inside)
         const inventoryRes = this.scanner.getInventoryContents(materialSource);
@@ -84,7 +82,14 @@ export class ProcessingEngine {
             this.log.warn("Failed to get inventory contents for processing");
             return results;
         }
-        const inventoryContents = inventoryRes.value;
+        // Create local copy for tracking (avoid mutating original)
+        const localInventory = new Map<string, InventoryItemInfo>();
+        for (const [key, value] of inventoryRes.value) {
+            localInventory.set(key, {
+                totalCount: value.totalCount,
+                slots: [...value.slots],
+            });
+        }
 
         // Ensure processing chest is connected before operations
         processingChest.ensureConnected();
@@ -95,7 +100,7 @@ export class ProcessingEngine {
         }
 
         // Process each mapping in the chain
-        for (const [inputItemId, outputItemId] of Object.entries(processing.chain)) {
+        for (const [inputItemId, outputItemId] of Object.entries(config.chain)) {
             // Check if processing chest has space
             const spaceRes = this.hasAvailableSpace(processingChest);
             if (!spaceRes.ok || !spaceRes.value) {
@@ -121,7 +126,7 @@ export class ProcessingEngine {
             // Check if this material should be processed
             const shouldRes = this.shouldProcess(
                 config,
-                inventoryContents,
+                localInventory,
                 inputItemId,
                 outputItemId,
             );
@@ -143,12 +148,12 @@ export class ProcessingEngine {
             if (transferRes.ok) {
                 results.push(transferRes.value);
 
-                // Update local inventory tracking to reflect transfer
-                const inputInfo = inventoryContents.get(inputItemId);
+                // Update local inventory tracking (not the original!)
+                const inputInfo = localInventory.get(inputItemId);
                 if (inputInfo) {
                     inputInfo.totalCount -= transferRes.value.itemsTransferred;
                     if (inputInfo.totalCount <= 0) {
-                        inventoryContents.delete(inputItemId);
+                        localInventory.delete(inputItemId);
                     }
                 }
             }
@@ -194,16 +199,14 @@ export class ProcessingEngine {
      * Check if a single processing operation should be performed.
      */
     private shouldProcess(
-        config: AppConfig,
+        config: ProcessingPhaseConfig,
         inventoryContents: Map<string, InventoryItemInfo>,
         inputItemId: string,
         outputItemId: string,
     ): Result<{ sourceSlot: number }> {
-        const processing = config.processing!;
-
         // Thresholds are already in items (configured as n * STACK_SIZE)
-        const minInputReserve = processing.minInputReserve;
-        const maxOutputStock = processing.maxOutputStock;
+        const minInputReserve = config.minInputReserve;
+        const maxOutputStock = config.maxOutputStock;
 
         // Check input material stock
         const inputInfo = inventoryContents.get(inputItemId);

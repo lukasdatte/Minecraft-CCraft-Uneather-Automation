@@ -1,10 +1,23 @@
+import { Result, ok, err } from "../core/result";
 import { Logger } from "../core/logger";
 import {
-    AppConfig,
     MaterialId,
     MaterialConfig,
+    MaterialRegistry,
+    UneartherTypeRegistry,
     UneartherInstance,
 } from "../types";
+
+/**
+ * Configuration for the Scheduler.
+ * Contains only the data needed for material selection.
+ */
+export interface SchedulerConfig {
+    /** Material definitions */
+    materials: MaterialRegistry;
+    /** Unearther type definitions */
+    uneartherTypes: UneartherTypeRegistry;
+}
 
 /**
  * Selection result from the scheduler.
@@ -38,7 +51,7 @@ interface AvailableMaterial {
  */
 export class Scheduler {
     constructor(
-        private config: AppConfig,
+        private config: SchedulerConfig,
         private log: Logger,
     ) {}
 
@@ -48,18 +61,18 @@ export class Scheduler {
      * @param unearther - The unearther instance needing material
      * @param inventoryContents - Current inventory contents (itemId -> {totalCount, slots})
      * @param stackSize - How many items will be transferred
-     * @returns Selected material or null if none available
+     * @returns Result with selected material or error code
      */
     selectMaterial(
         unearther: UneartherInstance,
         inventoryContents: Map<string, { totalCount: number; slots: number[] }>,
         stackSize: number,
-    ): MaterialSelection | null {
+    ): Result<MaterialSelection> {
         // Get unearther type and supported materials
         const uType = this.config.uneartherTypes[unearther.type];
         if (!uType) {
             this.log.error("Unknown unearther type", { type: unearther.type });
-            return null;
+            return err("ERR_UNKNOWN_UNEARTHER_TYPE", { type: unearther.type });
         }
 
         // Filter to available materials (enough stock)
@@ -102,17 +115,23 @@ export class Scheduler {
         }
 
         if (available.length === 0) {
-            this.log.warn("No materials available for unearther", {
+            this.log.debug("No materials available for unearther", {
                 id: unearther.id,
                 type: unearther.type,
             });
-            return null;
+            return err("ERR_NO_MATERIAL_AVAILABLE", {
+                uneartherId: unearther.id,
+                type: unearther.type,
+            });
         }
 
         // Weighted random selection
         const selected = this.weightedSelect(available);
         if (!selected) {
-            return null;
+            return err("ERR_NO_MATERIAL_AVAILABLE", {
+                uneartherId: unearther.id,
+                type: unearther.type,
+            });
         }
 
         this.log.debug("Selected material for unearther", {
@@ -121,11 +140,11 @@ export class Scheduler {
             weight: selected.config.weight,
         });
 
-        return {
+        return ok({
             materialId: selected.materialId,
             material: selected.config,
             sourceSlot: selected.slots[0],
-        };
+        });
     }
 
     /**

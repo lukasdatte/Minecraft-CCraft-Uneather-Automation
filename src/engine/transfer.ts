@@ -1,7 +1,7 @@
 import { Result, ok, err } from "../core/result";
 import { Logger } from "../core/logger";
 import { SafePeripheral } from "../core/safe-peripheral";
-import { AppConfig, UneartherInstance, MaterialId } from "../types";
+import { UneartherInstance, UneartherRegistry, MaterialId } from "../types";
 import { MaterialSelection } from "./scheduler";
 
 // Type InventoryPeripheral from @jackmacwindows/craftos-types is globally declared
@@ -124,31 +124,48 @@ export class TransferEngine {
 
     /**
      * Process all empty unearthers and transfer materials to them.
+     * Note: Does NOT mutate inventoryContents. Caller should track transfers via returned results.
+     *
+     * @param unearthers - Registry of unearthers
+     * @param materialSource - Material source peripheral
+     * @param emptyUneartherIds - IDs of empty unearthers
+     * @param selectMaterial - Function to select material for an unearther (returns Result)
+     * @param inventoryContents - Current inventory state (read-only)
+     * @param stackSize - Items per transfer
      */
     processEmptyUnearthers(
-        config: AppConfig,
+        unearthers: UneartherRegistry,
         materialSource: SafePeripheral<InventoryPeripheral>,
         emptyUneartherIds: string[],
         selectMaterial: (
             unearther: UneartherInstance,
             contents: Map<string, { totalCount: number; slots: number[] }>,
             stackSize: number,
-        ) => MaterialSelection | null,
+        ) => Result<MaterialSelection>,
         inventoryContents: Map<string, { totalCount: number; slots: number[] }>,
+        stackSize: number,
     ): TransferResult[] {
         const results: TransferResult[] = [];
-        const stackSize = config.system.transferStackSize;
+
+        // Create local copy for tracking (avoid mutating original)
+        const localInventory = new Map<string, { totalCount: number; slots: number[] }>();
+        for (const [key, value] of inventoryContents) {
+            localInventory.set(key, {
+                totalCount: value.totalCount,
+                slots: [...value.slots],
+            });
+        }
 
         for (const uneartherId of emptyUneartherIds) {
-            const unearther = config.unearthers[uneartherId];
+            const unearther = unearthers[uneartherId];
             if (!unearther) {
                 this.log.warn("Unknown unearther ID", { id: uneartherId });
                 continue;
             }
 
             // Select material for this unearther
-            const selection = selectMaterial(unearther, inventoryContents, stackSize);
-            if (!selection) {
+            const selectionRes = selectMaterial(unearther, localInventory, stackSize);
+            if (!selectionRes.ok) {
                 this.log.debug("No material available for unearther", { id: uneartherId });
                 continue;
             }
@@ -158,19 +175,19 @@ export class TransferEngine {
                 materialSource,
                 unearther.inputChest,
                 unearther,
-                selection,
+                selectionRes.value,
                 stackSize,
             );
 
             if (transferRes.ok) {
                 results.push(transferRes.value);
 
-                // Update inventory contents to reflect the transfer
-                const itemInfo = inventoryContents.get(selection.material.itemId);
+                // Update local inventory tracking (not the original!)
+                const itemInfo = localInventory.get(selectionRes.value.material.itemId);
                 if (itemInfo) {
                     itemInfo.totalCount -= transferRes.value.itemsTransferred;
                     if (itemInfo.totalCount <= 0) {
-                        inventoryContents.delete(selection.material.itemId);
+                        localInventory.delete(selectionRes.value.material.itemId);
                     }
                 }
             } else {

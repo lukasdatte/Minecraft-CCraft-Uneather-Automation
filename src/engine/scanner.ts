@@ -3,9 +3,9 @@ import { Logger } from "../core/logger";
 import { SafePeripheral } from "../core/safe-peripheral";
 import { ValidatedPeripherals } from "../registry/peripheral";
 import {
-    AppConfig,
     UneartherId,
     UneartherInstance,
+    UneartherRegistry,
     InventoryItemInfo,
 } from "../types";
 
@@ -36,19 +36,25 @@ export class Scanner {
     constructor(private log: Logger) {}
 
     /**
-     * Scan all unearthers in the config.
+     * Scan all unearthers.
      * Returns scan results for each unearther and a list of empty ones.
+     *
+     * @param unearthers - Registry of unearthers to scan
+     * @param peripherals - Validated peripherals
      */
-    scanAllUnearthers(config: AppConfig, peripherals: ValidatedPeripherals): Result<ScanResult> {
+    scanAllUnearthers(
+        unearthers: UneartherRegistry,
+        peripherals: ValidatedPeripherals,
+    ): Result<ScanResult> {
         this.log.debug("Starting scan of all unearthers", {
-            count: Object.keys(config.unearthers).length,
+            count: Object.keys(unearthers).length,
         });
 
         const results: UneartherScanResult[] = [];
         const emptyUnearthers: UneartherId[] = [];
         let errors = 0;
 
-        for (const [id, unearther] of Object.entries(config.unearthers)) {
+        for (const [id, unearther] of Object.entries(unearthers)) {
             const scanRes = this.scanUnearther(peripherals, unearther);
 
             if (scanRes.ok) {

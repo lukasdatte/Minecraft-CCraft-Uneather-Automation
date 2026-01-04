@@ -1,83 +1,23 @@
 import { CONFIG } from "./config";
 import { Logger } from "./core/logger";
 import { printStartupDiagnostics } from "./core/diagnostics";
-import { PeripheralRegistry, ValidatedPeripherals } from "./registry/peripheral";
+import { PeripheralRegistry } from "./registry/peripheral";
 import { Scanner } from "./engine/scanner";
-import { Scheduler } from "./engine/scheduler";
-import { TransferEngine, TransferResult } from "./engine/transfer";
-import { ProcessingEngine } from "./engine/processing";
-import { AppState, ProcessingResult } from "./types";
-
-/**
- * Initialize application state.
- */
-function createInitialState(): AppState {
-    const uneartherStatus: AppState["uneartherStatus"] = {};
-
-    for (const [id] of Object.entries(CONFIG.unearthers)) {
-        uneartherStatus[id] = {
-            id,
-            isEmpty: false,
-        };
-    }
-
-    return {
-        uneartherStatus,
-        totalTransfers: 0,
-        totalProcessingOps: 0,
-        lastScanTime: 0,
-        warnings: [],
-    };
-}
-
-/**
- * Update state after transfers.
- */
-function updateState(
-    state: AppState,
-    transfers: TransferResult[],
-): void {
-    for (const transfer of transfers) {
-        const status = state.uneartherStatus[transfer.unearther.id];
-        if (status) {
-            status.isEmpty = false;
-            status.lastMaterial = transfer.materialId;
-            status.lastTransferTime = os.epoch("utc");
-        }
-        state.totalTransfers++;
-    }
-    state.lastScanTime = os.epoch("utc");
-}
-
-/**
- * Update state after processing operations.
- */
-function updateProcessingState(
-    state: AppState,
-    results: ProcessingResult[],
-): void {
-    state.totalProcessingOps += results.length;
-}
+import { TaskRegistry } from "./tasks/registry";
+import { TaskContext } from "./tasks/types";
+import { HammeringTask } from "./tasks/hammering";
+import { UnearthingTask } from "./tasks/unearthing";
 
 /**
  * Main application entry point.
  */
 function main(): void {
     print("==============================================");
-    print("  Unearther Distribution System v2.0");
+    print("  Unearther Distribution System v3.0");
     print("==============================================");
     print("");
 
-    // Show startup diagnostics
-    printStartupDiagnostics(CONFIG);
-
-    // Validate critical config values
-    if (CONFIG.system.scanIntervalSeconds <= 0) {
-        print("ERROR: scanIntervalSeconds must be > 0");
-        return;
-    }
-
-    // 1. Create Logger (no dependencies)
+    // 1. Create Logger
     const log = new Logger({
         level: CONFIG.system.logLevel,
         logFile: CONFIG.system.logFile,
@@ -85,160 +25,84 @@ function main(): void {
 
     log.info("Boot sequence starting...");
 
-    // 2. Create PeripheralRegistry (needs: Logger)
+    // 2. Validate peripherals
     const peripheralRegistry = new PeripheralRegistry(log);
-
-    // 3. Validate all peripherals
-    log.info("Phase 1: Validating peripherals...");
     const peripheralsRes = peripheralRegistry.validate(CONFIG);
+
     if (!peripheralsRes.ok) {
-        log.error("Failed to validate peripherals", {
-            code: peripheralsRes.code,
-        });
-        log.error("Please check your configuration and wired network.");
+        log.error("Failed to validate peripherals", { code: peripheralsRes.code });
         return;
     }
-    const peripherals: ValidatedPeripherals = peripheralsRes.value;
-    log.info("Peripherals validated successfully");
+    const peripherals = peripheralsRes.value;
 
-    // 4. Set monitor on logger if available
+    // 3. Set monitor on logger if available
     if (peripherals.monitor) {
         log.setMonitor(peripherals.monitor);
-        log.info("Monitor connected");
     }
 
-    // 5. Create Scanner (needs: Logger)
-    const scanner = new Scanner(log);
+    // 4. Print global diagnostics (network + system only)
+    printStartupDiagnostics(CONFIG);
 
-    // 6. Create Scheduler (needs: Config, Logger)
-    const scheduler = new Scheduler(CONFIG, log);
-    log.info("Scheduler initialized");
+    // 5. Create TaskContext (shared resources)
+    const taskContext: TaskContext = {
+        peripherals,
+        logger: log,
+        systemConfig: {
+            scanIntervalSeconds: CONFIG.system.scanIntervalSeconds,
+            logLevel: CONFIG.system.logLevel,
+        },
+    };
 
-    // 7. Create TransferEngine (needs: Logger)
-    const transferEngine = new TransferEngine(log);
+    // 6. Create TaskRegistry and register tasks
+    const taskRegistry = new TaskRegistry(log);
 
-    // 8. Create ProcessingEngine (needs: Scanner, Logger)
-    const processingEngine = new ProcessingEngine(scanner, log);
+    // Order matters: Hammering before Unearthing!
+    // This ensures materials are processed before distribution
+    if (CONFIG.tasks.hammering.enabled) {
+        taskRegistry.register(new HammeringTask(), CONFIG.tasks.hammering);
+    }
+    if (CONFIG.tasks.unearthing.enabled) {
+        taskRegistry.register(new UnearthingTask(), CONFIG.tasks.unearthing);
+    }
 
-    // 9. Create initial state
-    const state = createInitialState();
-    log.info("State initialized");
+    // 7. Print task diagnostics
+    taskRegistry.printDiagnostics();
 
-    // 10. Log configuration summary
+    // 8. Initialize all tasks
+    taskRegistry.init(taskContext);
+
     log.info("Configuration summary", {
-        unearthers: Object.keys(CONFIG.unearthers).length,
-        materials: Object.keys(CONFIG.materials).length,
-        uneartherTypes: Object.keys(CONFIG.uneartherTypes).length,
+        tasksRegistered: taskRegistry.getTaskCount(),
+        tasksEnabled: taskRegistry.getEnabledTaskCount(),
         scanInterval: CONFIG.system.scanIntervalSeconds,
-        stackSize: CONFIG.system.transferStackSize,
-        processingEnabled: CONFIG.processing?.enabled ?? false,
-        processingChain: CONFIG.processing?.chain
-            ? Object.keys(CONFIG.processing.chain).length
-            : 0,
     });
+
+    // 9. Create Scanner for inventory reads
+    const scanner = new Scanner(log);
 
     print("");
     log.info("=== Starting main loop ===");
     print("");
 
-    // Main loop
+    // 10. Main loop
     while (true) {
         const loopStart = os.epoch("utc");
 
-        // Phase 1: Scan all unearthers
-        log.debug("Scanning unearthers...");
-        const scanRes = scanner.scanAllUnearthers(CONFIG, peripherals);
+        // Get current inventory (fresh scan each cycle)
+        const inventoryRes = scanner.getInventoryContents(peripherals.materialSource);
 
-        if (!scanRes.ok) {
-            log.error("Scan failed", { code: scanRes.code });
+        if (!inventoryRes.ok) {
+            log.error("Failed to scan inventory", { code: inventoryRes.code });
             sleep(CONFIG.system.scanIntervalSeconds);
             continue;
         }
 
-        const { emptyUnearthers } = scanRes.value;
+        // Run all tasks
+        taskRegistry.runCycle(inventoryRes.value);
 
-        // Update state with scan results
-        for (const result of scanRes.value.results) {
-            const status = state.uneartherStatus[result.id];
-            if (status) {
-                status.isEmpty = result.isEmpty;
-            }
-        }
-
-        // Phase 2: Get inventory contents (needed for both processing and distribution)
-        log.debug("Scanning material source...");
-        const contentsRes = scanner.getInventoryContents(peripherals.materialSource);
-
-        if (!contentsRes.ok) {
-            log.error("Failed to scan material source", { code: contentsRes.code });
-            sleep(CONFIG.system.scanIntervalSeconds);
-            continue;
-        }
-
-        let inventoryContents = contentsRes.value;
-        log.debug("Material source scanned", {
-            uniqueItems: inventoryContents.size,
-        });
-
-        // Phase 2.5: Process materials (runs independently of unearthers)
-        const processingRes = processingEngine.runPhase(
-            CONFIG,
-            peripherals.materialSource,
-            peripherals.processingChest,
-        );
-
-        if (processingRes.ok && processingRes.value.length > 0) {
-            updateProcessingState(state, processingRes.value);
-            log.info("Processing complete", {
-                operations: processingRes.value.length,
-                totalProcessingOps: state.totalProcessingOps,
-            });
-
-            // Re-scan inventory after processing (contents may have changed)
-            const updatedContentsRes = scanner.getInventoryContents(peripherals.materialSource);
-            if (updatedContentsRes.ok) {
-                inventoryContents = updatedContentsRes.value;
-            }
-        } else if (!processingRes.ok) {
-            // Log actual errors (not OK_NOOP which is a success code)
-            log.warn("Processing phase error", { code: processingRes.code });
-        }
-
-        // Phase 3: Check for empty unearthers
-        if (emptyUnearthers.length === 0) {
-            log.debug("No empty unearthers, waiting...");
-            sleep(CONFIG.system.scanIntervalSeconds);
-            continue;
-        }
-
-        log.info("Found empty unearthers", { count: emptyUnearthers.length });
-
-        // Phase 4: Process empty unearthers
-        const transfers = transferEngine.processEmptyUnearthers(
-            CONFIG,
-            peripherals.materialSource,
-            emptyUnearthers,
-            (unearther, contents, stackSize) =>
-                scheduler.selectMaterial(unearther, contents, stackSize),
-            inventoryContents,
-        );
-
-        // Phase 5: Update state
-        if (transfers.length > 0) {
-            updateState(state, transfers);
-            log.info("Transfers complete", {
-                successful: transfers.length,
-                total: state.totalTransfers,
-            });
-        } else {
-            log.debug("No transfers performed (materials unavailable or insufficient)");
-        }
-
-        // Phase 6: Sleep until next scan
+        // Sleep until next cycle
         const elapsed = (os.epoch("utc") - loopStart) / 1000;
         const sleepTime = math.max(0.1, CONFIG.system.scanIntervalSeconds - elapsed);
-        log.debug("Loop complete", { elapsed: string.format("%.2f", elapsed), sleepTime });
-
         sleep(sleepTime);
     }
 }

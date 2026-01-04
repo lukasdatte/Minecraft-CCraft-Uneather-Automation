@@ -1,4 +1,4 @@
-import { AppConfig, STACK_SIZE } from "../types";
+import { AppConfig } from "../types";
 
 /**
  * Print a separator line.
@@ -34,18 +34,20 @@ function getConfiguredPeripheralNames(config: AppConfig): Map<string, string[]> 
         configured.set(config.peripherals.monitor.name, ["Monitor"]);
     }
 
-    // Processing chest (optional)
-    if (config.peripherals.processingChest) {
-        configured.set(config.peripherals.processingChest.name, ["Processing Chest"]);
+    // Processing chest (from hammering task)
+    if (config.tasks.hammering.enabled && config.tasks.hammering.processingChest) {
+        configured.set(config.tasks.hammering.processingChest.name, ["Processing Chest"]);
     }
 
-    // Unearther input chests
-    for (const [id, unearther] of Object.entries(config.unearthers)) {
-        const existing = configured.get(unearther.inputChest);
-        if (existing) {
-            existing.push(`Unearther: ${id}`);
-        } else {
-            configured.set(unearther.inputChest, [`Unearther: ${id}`]);
+    // Unearther input chests (from unearthing task)
+    if (config.tasks.unearthing.enabled) {
+        for (const [id, unearther] of Object.entries(config.tasks.unearthing.unearthers)) {
+            const existing = configured.get(unearther.inputChest);
+            if (existing) {
+                existing.push(`Unearther: ${id}`);
+            } else {
+                configured.set(unearther.inputChest, [`Unearther: ${id}`]);
+            }
         }
     }
 
@@ -53,7 +55,8 @@ function getConfiguredPeripheralNames(config: AppConfig): Map<string, string[]> 
 }
 
 /**
- * Print startup diagnostics: network peripherals and configuration.
+ * Print startup diagnostics: network peripherals and system settings.
+ * Task-specific diagnostics are printed by the tasks themselves.
  */
 export function printStartupDiagnostics(config: AppConfig): void {
     printSection("STARTUP DIAGNOSTICS");
@@ -139,60 +142,17 @@ export function printStartupDiagnostics(config: AppConfig): void {
         }
     }
 
-    // 2. Materials configuration
-    printSection("MATERIALS");
-    const materialEntries = Object.entries(config.materials);
-    print(`  Total: ${materialEntries.length}`);
-    print("");
-    for (const [id, mat] of materialEntries) {
-        print(`  ${id}:`);
-        print(`    Item ID:   ${mat.itemId}`);
-        print(`    Min Stock: ${mat.minStock}`);
-        print(`    Weight:    ${mat.weight}`);
-    }
-
-    // 3. Unearther Types
-    printSection("UNEARTHER TYPES");
-    const typeEntries = Object.entries(config.uneartherTypes);
-    print(`  Total: ${typeEntries.length}`);
-    print("");
-    for (const [id, typeDef] of typeEntries) {
-        print(`  ${id}:`);
-        print(`    Supported: ${typeDef.supportedMaterials.join(", ")}`);
-    }
-
-    // 4. Unearther Instances
-    printSection("UNEARTHERS");
-    const uneartherEntries = Object.entries(config.unearthers);
-    print(`  Total: ${uneartherEntries.length}`);
-    print("");
-    for (const [id, unearther] of uneartherEntries) {
-        print(`  ${id}:`);
-        print(`    Type:        ${unearther.type}`);
-        print(`    Input Chest: ${unearther.inputChest}`);
-    }
-
-    // 5. Processing Configuration
-    printSection("PROCESSING");
-    if (config.processing?.enabled) {
-        print("  Status: ENABLED");
-        print("");
-        print(`  Min Input Reserve: ${config.processing.minInputReserve} (${config.processing.minInputReserve / STACK_SIZE} stacks)`);
-        print(`  Max Output Stock:  ${config.processing.maxOutputStock} (${config.processing.maxOutputStock / STACK_SIZE} stacks)`);
-        print("");
-        print("  Processing Chain:");
-        for (const [input, output] of Object.entries(config.processing.chain)) {
-            print(`    ${input} -> ${output}`);
-        }
-    } else {
-        print("  Status: DISABLED");
-    }
-
-    // 6. System Settings
+    // 2. System Settings
     printSection("SYSTEM SETTINGS");
-    print(`  Scan Interval:  ${config.system.scanIntervalSeconds}s`);
-    print(`  Stack Size:     ${config.system.transferStackSize}`);
-    print(`  Log Level:      ${config.system.logLevel}`);
+    print(`  Scan Interval: ${config.system.scanIntervalSeconds}s`);
+    print(`  Log Level:     ${config.system.logLevel}`);
+
+    // 3. Task Status
+    print("");
+    print(">> Task Status");
+    printSeparator();
+    print(`  Hammering:  ${config.tasks.hammering.enabled ? "ENABLED" : "DISABLED"}`);
+    print(`  Unearthing: ${config.tasks.unearthing.enabled ? "ENABLED" : "DISABLED"}`);
 
     // End diagnostics
     print("");
