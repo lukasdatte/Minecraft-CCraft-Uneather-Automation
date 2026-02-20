@@ -138,4 +138,18 @@ export class TaskRegistry {
     getEnabledTaskCount(): number {
         return this.tasks.filter((t) => t.enabled).length;
     }
+
+    /**
+     * Gibt den aktuellen State aller aktivierten Tasks zurück.
+     * Key = Task-ID, Value = Task-spezifischer State.
+     */
+    getTaskStates(): Map<string, unknown> {
+        const states = new Map<string, unknown>();
+        for (const entry of this.tasks) {
+            if (entry.enabled && entry.state !== null) {
+                states.set(entry.task.id, entry.state);
+            }
+        }
+        return states;
+    }
 }

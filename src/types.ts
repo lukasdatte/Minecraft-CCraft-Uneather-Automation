@@ -88,6 +88,8 @@ export interface SystemConfig {
     logLevel: LogLevel;
     /** Optional log file path for persistent logging */
     logFile?: string;
+    /** Maximum log lines before rotation (default: 500) */
+    maxLogLines?: number;
 }
 
 // ============================================================

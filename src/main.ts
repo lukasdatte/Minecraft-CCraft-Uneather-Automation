@@ -1,5 +1,6 @@
 import { CONFIG } from "./config";
 import { Logger } from "./core/logger";
+import { Dashboard, DashboardData } from "./core/dashboard";
 import { printStartupDiagnostics } from "./core/diagnostics";
 import { PeripheralRegistry } from "./registry/peripheral";
 import { Scanner } from "./engine/scanner";
@@ -7,6 +8,7 @@ import { TaskRegistry } from "./tasks/registry";
 import { TaskContext } from "./tasks/types";
 import { HammeringTask } from "./tasks/hammering";
 import { UnearthingTask } from "./tasks/unearthing";
+import { HammeringState, UnearthingState } from "./types";
 
 /**
  * Main application entry point.
@@ -21,6 +23,7 @@ function main(): void {
     const log = new Logger({
         level: CONFIG.system.logLevel,
         logFile: CONFIG.system.logFile,
+        maxLogLines: CONFIG.system.maxLogLines,
     });
 
     log.info("Boot sequence starting...");
@@ -35,9 +38,11 @@ function main(): void {
     }
     const peripherals = peripheralsRes.value;
 
-    // 3. Set monitor on logger if available
+    // 3. Create Dashboard if monitor available
+    let dashboard: Dashboard | undefined;
     if (peripherals.monitor) {
-        log.setMonitor(peripherals.monitor);
+        dashboard = new Dashboard(peripherals.monitor);
+        log.info("Dashboard attached to monitor");
     }
 
     // 4. Print global diagnostics (network + system only)
@@ -85,6 +90,9 @@ function main(): void {
     print("");
 
     // 10. Main loop
+    const startTime = os.epoch("utc");
+    let cycleCount = 0;
+
     while (true) {
         const loopStart = os.epoch("utc");
 
@@ -99,6 +107,22 @@ function main(): void {
 
         // Run all tasks
         taskRegistry.runCycle(inventoryRes.value);
+        cycleCount++;
+
+        // Update dashboard
+        if (dashboard) {
+            const taskStates = taskRegistry.getTaskStates();
+            const dashboardData: DashboardData = {
+                inventory: inventoryRes.value,
+                materials: CONFIG.tasks.unearthing.materials,
+                hammeringState: (taskStates.get("hammering") as HammeringState) ?? null,
+                unearthingState: (taskStates.get("unearthing") as UnearthingState) ?? null,
+                unearthers: CONFIG.tasks.unearthing.unearthers,
+                cycleCount,
+                startTime,
+            };
+            dashboard.update(dashboardData);
+        }
 
         // Sleep until next cycle
         const elapsed = (os.epoch("utc") - loopStart) / 1000;

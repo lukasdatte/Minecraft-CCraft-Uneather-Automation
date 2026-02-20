@@ -1,12 +1,10 @@
 import { LogLevel } from "../types";
-import { SafePeripheral } from "./safe-peripheral";
-
-// Types MonitorPeripheral, WriteFileHandle from @jackmacwindows/craftos-types are globally declared
 
 /** Logger configuration options */
 export interface LoggerOptions {
     level: LogLevel;
     logFile?: string;
+    maxLogLines?: number;
 }
 
 /** Log level priorities (lower = more verbose) */
@@ -17,48 +15,34 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
     error: 3,
 };
 
+const DEFAULT_MAX_LOG_LINES = 500;
+
 /**
- * Logger class with support for console, file, and monitor output.
+ * Logger class with support for console and file output.
+ * Includes line-based log rotation to prevent unbounded file growth.
  * Instantiate in main.ts and pass to other classes.
  */
 export class Logger {
     private level: LogLevel;
     private logFile?: WriteFileHandle;
-    private monitor?: SafePeripheral<MonitorPeripheral>;
-    private monitorLines: string[] = [];
-    private maxMonitorLines = 20;
+    private logFilePath?: string;
+    private linesWritten = 0;
+    private maxLogLines: number;
 
     constructor(options: LoggerOptions) {
         this.level = options.level;
+        this.maxLogLines = options.maxLogLines ?? DEFAULT_MAX_LOG_LINES;
 
         if (options.logFile) {
+            this.logFilePath = options.logFile;
             this.openLogFile(options.logFile);
         }
-    }
-
-    /**
-     * Set monitor for log output.
-     * Call after peripherals are validated.
-     */
-    setMonitor(monitor: SafePeripheral<MonitorPeripheral>): void {
-        this.monitor = monitor;
-        // Initialize monitor with batch call
-        monitor.call(
-            (m) => {
-                const [, height] = m.getSize();
-                this.maxMonitorLines = height - 2;
-                m.setTextScale(0.5);
-                m.clear();
-            },
-            undefined,
-        );
     }
 
     debug(msg: string, data?: unknown): void {
         if (!this.shouldLog("debug")) return;
         const line = `[DBG ] ${this.timestamp()} ${msg}${this.fmt(data)}`;
         print(line);
-        this.writeToMonitor("[DBG]", msg);
         this.writeToFile(line);
     }
 
@@ -66,7 +50,6 @@ export class Logger {
         if (!this.shouldLog("info")) return;
         const line = `[INFO] ${this.timestamp()} ${msg}${this.fmt(data)}`;
         print(line);
-        this.writeToMonitor("[INF]", msg);
         this.writeToFile(line);
     }
 
@@ -74,7 +57,6 @@ export class Logger {
         if (!this.shouldLog("warn")) return;
         const line = `[WARN] ${this.timestamp()} ${msg}${this.fmt(data)}`;
         print(line);
-        this.writeToMonitor("[WRN]", msg);
         this.writeToFile(line);
     }
 
@@ -82,7 +64,6 @@ export class Logger {
         if (!this.shouldLog("error")) return;
         const line = `[ERR ] ${this.timestamp()} ${msg}${this.fmt(data)}`;
         print(line);
-        this.writeToMonitor("[ERR]", msg);
         this.writeToFile(line);
     }
 
@@ -100,6 +81,7 @@ export class Logger {
             this.logFile.writeLine(`=== NEUSTART ${this.timestamp()} ===`);
             this.logFile.writeLine("========================================");
             this.logFile.flush();
+            this.linesWritten += 4;
         }
     }
 
@@ -121,39 +103,59 @@ export class Logger {
         if (!this.logFile) return;
         this.logFile.writeLine(line);
         this.logFile.flush();
+        this.linesWritten++;
+
+        if (this.linesWritten >= this.maxLogLines) {
+            this.rotateLogFile();
+        }
     }
 
-    private writeToMonitor(prefix: string, msg: string): void {
-        if (!this.monitor) return;
+    private rotateLogFile(): void {
+        if (!this.logFilePath) return;
 
-        const line = `${this.timestamp()} ${prefix} ${msg}`;
-        this.monitorLines.push(line);
+        // 1. Close current handle
+        this.logFile!.close();
+        this.logFile = undefined;
 
-        // Keep only the last N lines
-        while (this.monitorLines.length > this.maxMonitorLines) {
-            this.monitorLines.shift();
+        // 2. Read all lines
+        const [readHandle] = fs.open(this.logFilePath, "r");
+        if (!readHandle) {
+            // Can't read - reset counter and reopen in append mode
+            this.linesWritten = 0;
+            this.openLogFile(this.logFilePath);
+            return;
         }
 
-        // Ensure connected before output, then redraw (silent fail on disconnect)
-        this.monitor.ensureConnected();
-        const linesToDraw = this.monitorLines;
-        this.monitor.call(
-            (m) => {
-                m.clear();
+        const content = (readHandle as unknown as ReadFileHandle).readAll();
+        (readHandle as unknown as ReadFileHandle).close();
 
-                // Header
-                m.setCursorPos(1, 1);
-                m.setTextColor(colors.yellow);
-                m.write("=== Unearther Distribution System ===");
+        // 3. Keep last half of maxLogLines
+        const keepLines = math.floor(this.maxLogLines / 2);
+        const allLines = string.gmatch(content ?? "", "[^\n]+");
+        const lineArray: string[] = [];
+        for (const [line] of allLines) {
+            lineArray.push(line);
+        }
 
-                // Log lines
-                m.setTextColor(colors.white);
-                for (let i = 0; i < linesToDraw.length; i++) {
-                    m.setCursorPos(1, i + 2);
-                    m.write(linesToDraw[i]);
-                }
-            },
-            undefined,
-        );
+        const startIndex = math.max(0, lineArray.length - keepLines);
+        const keptLines = lineArray.slice(startIndex);
+
+        // 4. Write truncated content
+        const [writeHandle] = fs.open(this.logFilePath, "w");
+        if (writeHandle) {
+            const wh = writeHandle as unknown as WriteFileHandle;
+            for (const l of keptLines) {
+                wh.writeLine(l);
+            }
+            wh.flush();
+            wh.close();
+        }
+
+        // 5. Reopen in append mode
+        const [appendHandle] = fs.open(this.logFilePath, "a");
+        if (appendHandle) {
+            this.logFile = appendHandle as unknown as WriteFileHandle;
+            this.linesWritten = keptLines.length;
+        }
     }
 }
