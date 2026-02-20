@@ -18,7 +18,7 @@ The executor will *visit* stations that are empty and record results, but will n
 npm install
 npm run build
 ```
-This produces `dist/main.lua`.
+This produces `dist/unearther.lua`.
 
 ## Configure
 Edit `src/config.ts`.
@@ -39,7 +39,7 @@ Edit `src/config.ts`.
 ## Run
 On the turtle:
 ```lua
-lua main.lua
+lua unearther.lua
 ```
 
 ## Diagnostics

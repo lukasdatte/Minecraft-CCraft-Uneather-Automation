@@ -1,4 +1,5 @@
-import { LogLevel } from "../types";
+/** Log level for the application */
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
 /** Logger configuration options */
 export interface LoggerOptions {
@@ -73,16 +74,18 @@ export class Logger {
 
     private openLogFile(path: string): void {
         const [handle] = fs.open(path, "a");
-        if (handle) {
-            this.logFile = handle as unknown as WriteFileHandle;
-            // Write restart marker
-            this.logFile.writeLine("");
-            this.logFile.writeLine("========================================");
-            this.logFile.writeLine(`=== NEUSTART ${this.timestamp()} ===`);
-            this.logFile.writeLine("========================================");
-            this.logFile.flush();
-            this.linesWritten += 4;
+        if (!handle) {
+            print("[WARN] Could not open log file: " + path);
+            return;
         }
+        this.logFile = handle as unknown as WriteFileHandle;
+        // Write restart marker
+        this.logFile.writeLine("");
+        this.logFile.writeLine("========================================");
+        this.logFile.writeLine(`=== NEUSTART ${this.timestamp()} ===`);
+        this.logFile.writeLine("========================================");
+        this.logFile.flush();
+        this.linesWritten += 4;
     }
 
     private shouldLog(level: LogLevel): boolean {
@@ -131,10 +134,18 @@ export class Logger {
 
         // 3. Keep last half of maxLogLines
         const keepLines = math.floor(this.maxLogLines / 2);
-        const allLines = string.gmatch(content ?? "", "[^\n]+");
+        const contentStr = content ?? "";
         const lineArray: string[] = [];
-        for (const [line] of allLines) {
-            lineArray.push(line);
+        let pos = 1;
+        while (pos <= contentStr.length) {
+            const [nlPos] = string.find(contentStr, "\n", pos, true);
+            if (nlPos) {
+                lineArray.push(string.sub(contentStr, pos, nlPos - 1));
+                pos = nlPos + 1;
+            } else {
+                lineArray.push(string.sub(contentStr, pos));
+                break;
+            }
         }
 
         const startIndex = math.max(0, lineArray.length - keepLines);
@@ -153,9 +164,12 @@ export class Logger {
 
         // 5. Reopen in append mode
         const [appendHandle] = fs.open(this.logFilePath, "a");
-        if (appendHandle) {
-            this.logFile = appendHandle as unknown as WriteFileHandle;
-            this.linesWritten = keptLines.length;
+        if (!appendHandle) {
+            print("[WARN] Could not reopen log file: " + this.logFilePath);
+            this.linesWritten = 0;
+            return;
         }
+        this.logFile = appendHandle as unknown as WriteFileHandle;
+        this.linesWritten = keptLines.length;
     }
 }

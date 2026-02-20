@@ -18,3 +18,11 @@ export function okNoop<T>(value: T): Result<T> {
 export function err<T = never>(code: ErrorCode, detail?: unknown): Result<T> {
     return { ok: false, code, detail };
 }
+
+/**
+ * Forward an error Result to a different Result type.
+ * Use when delegating to a function that returns Result<A> but you need Result<B>.
+ */
+export function forwardErr<T>(result: Result<unknown>): Result<T> {
+    return { ok: false, code: (result as { code: ErrorCode }).code, detail: (result as { detail?: unknown }).detail };
+}

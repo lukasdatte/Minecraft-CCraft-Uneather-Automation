@@ -7,6 +7,13 @@
     ],
     "moduleResolution": "node",
     "strict": false,
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["src/core/*"],
+      "@lib/*": ["src/lib/*"],
+      "@apps/*": ["src/apps/*"],
+      "@entries/*": ["src/entries/*"]
+    },
     "types": [
       "@jackmacwindows/lua-types/cc-5.2",
       "@jackmacwindows/craftos-types",
@@ -16,8 +23,8 @@
   "tstl": {
     "luaTarget": "CC-5.2",
     "luaLibImport": "require",
-    "luaBundle": "dist/main.lua",
-    "luaBundleEntry": "src/main.ts",
+    "luaBundle": "dist/unearther.lua",
+    "luaBundleEntry": "src/entries/main.ts",
     "noImplicitSelf": true
   },
   "include": [

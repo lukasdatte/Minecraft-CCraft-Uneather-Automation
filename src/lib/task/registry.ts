@@ -1,23 +1,16 @@
-import { Logger } from "../core/logger";
+import { Logger } from "@core/logger";
+import { InventoryItemInfo } from "@lib/inventory/types";
 import { Task, TaskContext, RegisteredTask } from "./types";
-import { InventoryItemInfo } from "../types";
 
 /**
- * TaskRegistry - Zentraler Orchestrator für alle Tasks.
- *
- * Verwaltet die Registrierung, Initialisierung und Ausführung von Tasks.
- * Fehler in einem Task stoppen nicht die anderen (Error-Isolation via pcall).
+ * Central task registry for managing task lifecycle.
+ * Tasks are executed in registration order with pcall isolation.
  */
 export class TaskRegistry {
     private tasks: RegisteredTask[] = [];
-    private context: TaskContext | null = null;
 
     constructor(private log: Logger) {}
 
-    /**
-     * Registriert einen Task mit seiner Konfiguration.
-     * Tasks werden in Registrierungsreihenfolge ausgeführt.
-     */
     register<TConfig, TState>(
         task: Task<TConfig, TState>,
         config: TConfig,
@@ -31,13 +24,7 @@ export class TaskRegistry {
         this.log.info("Task registered", { id: task.id, name: task.name });
     }
 
-    /**
-     * Initialisiert alle registrierten Tasks.
-     * Muss vor runCycle() aufgerufen werden.
-     */
     init(context: TaskContext): void {
-        this.context = context;
-
         for (const entry of this.tasks) {
             const [success, result] = pcall(() =>
                 entry.task.init(context, entry.config),
@@ -66,10 +53,6 @@ export class TaskRegistry {
         }
     }
 
-    /**
-     * Führt einen Zyklus aller aktivierten Tasks aus.
-     * Fehler in einem Task stoppen nicht die anderen.
-     */
     runCycle(inventory: Map<string, InventoryItemInfo>): void {
         for (const entry of this.tasks) {
             if (!entry.enabled) continue;
@@ -83,7 +66,6 @@ export class TaskRegistry {
                     id: entry.task.id,
                     error: tostring(result),
                 });
-                // Task bleibt enabled, wird nächsten Zyklus erneut versucht
                 continue;
             }
 
@@ -95,7 +77,6 @@ export class TaskRegistry {
                 continue;
             }
 
-            // State aktualisieren
             entry.state = result.value.state;
 
             if (result.value.operationsCount > 0) {
@@ -108,9 +89,6 @@ export class TaskRegistry {
         }
     }
 
-    /**
-     * Gibt Diagnostik aller Tasks aus.
-     */
     printDiagnostics(): void {
         for (const entry of this.tasks) {
             const diag = entry.task.getDiagnostics(entry.config);
@@ -125,24 +103,14 @@ export class TaskRegistry {
         }
     }
 
-    /**
-     * Gibt die Anzahl registrierter Tasks zurück.
-     */
     getTaskCount(): number {
         return this.tasks.length;
     }
 
-    /**
-     * Gibt die Anzahl aktivierter Tasks zurück.
-     */
     getEnabledTaskCount(): number {
         return this.tasks.filter((t) => t.enabled).length;
     }
 
-    /**
-     * Gibt den aktuellen State aller aktivierten Tasks zurück.
-     * Key = Task-ID, Value = Task-spezifischer State.
-     */
     getTaskStates(): Map<string, unknown> {
         const states = new Map<string, unknown>();
         for (const entry of this.tasks) {

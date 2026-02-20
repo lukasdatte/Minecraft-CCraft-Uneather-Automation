@@ -2,7 +2,7 @@
   "name": "unearther-distributor-ts2lua",
   "version": "0.2.0",
   "description": "CC:Tweaked Turtle distributor (infrastructure-complete, item-logic stubbed).",
-  "main": "src/main.ts",
+  "main": "src/entries/main.ts",
   "scripts": {
     "prebuild": "npm run lint:fix",
     "build": "npx tstl",
@@ -10,7 +10,7 @@
     "lint": "eslint . && npm run typecheck",
     "lint:fix": "eslint . --fix && npm run typecheck",
     "predeploy": "npm run build",
-    "deploy": "copy dist\\main.lua \"%LOCALAPPDATA%\\.ftba\\instances\\ftb stoneblock 4 (5)\\saves\\My World\\computercraft\\computer\\0\\startup.lua\"",
+    "deploy": "copy dist\\unearther.lua \"%LOCALAPPDATA%\\.ftba\\instances\\ftb stoneblock 4 (5)\\saves\\My World\\computercraft\\computer\\0\\startup.lua\"",
     "prepare": "husky"
   },
   "devDependencies": {

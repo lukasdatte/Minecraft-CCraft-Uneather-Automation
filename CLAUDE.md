@@ -4,158 +4,129 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-CC:Tweaked computer-based distributor that compiles TypeScript to Lua using TypeScriptToLua. The system manages unearther machines by distributing materials from a central storage to input chests via wired modem network.
+CC:Tweaked computer-based automation system that compiles TypeScript to Lua using TypeScriptToLua (TSTL). Uses a modular orchestrator architecture to manage machines (hammers, unearthers) by distributing materials from central storage to input chests via wired modem network.
 
-### Material Processing System
+### Systems
 
-The system includes an automated material processing chain for hammer-based transformation:
+**Production (Hammer Chain):** Cobblestone → Gravel → Dirt → Sand → Dust
+- Stock-based scheduler assigns recipes to machines by output urgency
+- Pipes behind processing chest distribute to physical hammers
 
-```
-Cobblestone → Gravel → Dirt → Sand → Dust
-```
-
-**How it works:**
-- Computer monitors stock levels in the central storage (Drawer Controller)
-- When input material exceeds reserve threshold and output is below maximum, transfers 1 stack to processing chest
-- External pipe system handles distribution to hammers and return of processed materials
-
-**See `docs/material-processing.md` for detailed documentation.**
+**Distribution (Unearthers):** Weighted random material selection for unearther types
+- Each unearther type (archaeologist, geologist, dimensionalist) has different supported materials
 
 ## Build Commands
 
 ```bash
-npm run build       # Lint + compile TS to main.lua (runs prebuild automatically)
+npm run build       # Lint + compile TS to unearther.lua (runs prebuild automatically)
 npm run typecheck   # Type-check only (no emit)
 npm run lint        # Typecheck + ESLint
 npm run lint:fix    # Typecheck + ESLint with auto-fix
 ```
 
-Output: `dist/main.lua` (bundled entry point for CC:Tweaked).
+Output: `dist/unearther.lua` (bundled entry point for CC:Tweaked).
 
-## Architecture
+## Architecture (4-Layer)
 
-### Entry Point
-- `src/main.ts` - Boot sequence, main loop (scan → process → distribute → sleep)
+```
+Layer 4: entries/     ← Per-computer entry points + config
+Layer 3: apps/        ← Concrete systems (production, distribution)
+Layer 2: lib/         ← Shared reusable modules
+Layer 1: core/        ← Universal utilities
+```
 
-### Configuration (`src/`)
-- `config.ts` - Runtime configuration (peripherals, materials, unearthers, processing)
-  - `peripherals.processingChest` - Processing chest for hammer chain input
-  - `processing.chain` - Input→Output material mappings
-  - `processing.minInputReserveStacks` / `maxOutputStacks` - Thresholds in stacks (× 64)
-- `types.ts` - All TypeScript interfaces (`AppConfig`, `ProcessingConfig`, `UneartherInstance`, etc.)
+Dependency rule: Only downward, never upward.
 
-### Core (`src/core/`)
-- `result.ts` - `Result<T>` pattern used throughout (`ok()`, `okNoop()`, `err()`)
+### Layer 1: Core (`src/core/`)
+- `result.ts` - `Result<T>` pattern (`ok()`, `okNoop()`, `err()`, `forwardErr()`)
 - `errors.ts` - Error codes (`ResultCode` type)
-- `logger.ts` - Structured logging with level support (debug, info, warn, error)
+- `logger.ts` - Structured logging with level support and log rotation
 - `safe-peripheral.ts` - `SafePeripheral<T>` wrapper for resilient peripheral access
 
-### Engine (`src/engine/`)
-- `scanner.ts` - Scans unearthers and material source via wired modem
-- `scheduler.ts` - Weighted material selection for distribution
-- `transfer.ts` - Item transfer operations to unearthers
-- `processing.ts` - Material processing chain (Cobblestone→Gravel→Dirt→Sand→Dust)
+### Layer 2: Shared Modules (`src/lib/`)
+- `inventory/scanner.ts` - `getInventoryContents()`, `isInventoryEmpty()` standalone functions
+- `inventory/types.ts` - `InventoryItemInfo`, `SlotInfo`
+- `transfer/transfer.ts` - `executeTransfer()` race-condition-safe batch transfer
+- `peripheral/registry.ts` - Generic peripheral validation (task-agnostic)
+- `orchestrator/orchestrator.ts` - Core engine: scan machines + execute assignments
+- `orchestrator/types.ts` - `MachineConfig`, `MachineState`, `Assignment`, `Scheduler` interface
+- `scheduler/weighted.ts` - Weighted random selection (for distribution)
+- `scheduler/stock-based.ts` - Urgency-based selection (for production)
+- `task/types.ts` - `Task<TConfig, TState>` interface, `TaskContext`
+- `task/registry.ts` - Task lifecycle management with pcall isolation
+- `dashboard/renderer.ts` - Widget-based dashboard renderer
+- `dashboard/widgets/` - Header, stock table, machine status widgets
 
-### Registry (`src/registry/`)
-- `peripheral.ts` - Peripheral validation and wrapping (modem, inventories, monitor)
+### Layer 3: Applications (`src/apps/`)
+- `production/task.ts` - `ProductionTask` (Orchestrator + StockBasedScheduler)
+- `distribution/task.ts` - `DistributionTask` (Orchestrator + WeightedScheduler)
 
-### Documentation (`docs/`)
-- `material-processing.md` - Detailed documentation of the material processing system
+### Layer 4: Entry Points (`src/entries/`)
+- `main.ts` - Boot sequence, main loop
+- `config.ts` - Hardware-specific configuration
+- `types.ts` - `AppConfig` referencing app types
 
 ## Key Patterns
 
-- **Config-first**: Stations and peripherals are defined in `config.ts`, validated against wired network at boot
+- **Orchestrator pattern**: Generic engine receives `Assignment[]` from `Scheduler`, executes transfers
+- **Scheduler interface**: `schedule(machines, inventory) → Assignment[]` - different implementations for different strategies
+- **Config-first**: Peripherals and machines defined in `entries/config.ts`, validated at boot
 - **Result pattern**: All functions return `Result<T>` with `.ok`, `.code`, `.value` or `.detail`
-- **No implicit self**: TSTL configured with `noImplicitSelf: true` (no Lua `self` parameter)
+- **Path aliases**: `@core/*`, `@lib/*`, `@apps/*`, `@entries/*` (configured in tsconfig.json)
+- **No implicit self**: TSTL configured with `noImplicitSelf: true`
 
 ### Peripheral Resilience (SafePeripheral)
 
-CC:Tweaked peripherals can disconnect at runtime. Wrapped peripheral objects become stale after disconnect/reconnect. `SafePeripheral<T>` provides resilience:
+CC:Tweaked peripherals can disconnect at runtime. `SafePeripheral<T>` provides resilience:
 
 - **Try/catch** around all operations (compiles to Lua `pcall`)
 - **Caller-controlled reconnect** via explicit `ensureConnected()` call
 - **NO automatic retry** - prevents double transfers on partial failures
 
-**Methods:**
-- `ensureConnected()` - Real connection check via modem + reconnect if needed (caller calls this!)
-- `isConnected()` - Check connectivity via modem (no reconnect)
-- `call(op, fallback)` - Execute with try/catch, return fallback on error
-- `tryCall(op)` - Execute with try/catch, return `Result<T>`
-- `getName()` - Peripheral name for `pushItems`, logging
-
-**Pattern - with explicit reconnect:**
+**Pattern - race-condition-safe transfer (lib/transfer/transfer.ts):**
 ```typescript
-// Caller decides when to check/reconnect
-inv.ensureConnected();
-const items = inv.call(p => p.list(), undefined);
-if (!items) return err("ERR_SCAN_FAILED");
-```
-
-**Pattern - batch operation (multiple calls in one):**
-```typescript
-// Reconnect once before the batch
-materialSource.ensureConnected();
-const result = materialSource.call(p => {
+source.ensureConnected();
+const result = source.call((p) => {
     const currentItem = p.getItemDetail(slot);
-    if (!currentItem || currentItem.name !== expectedItem) {
-        return { error: "slot_changed" };
+    if (!currentItem || currentItem.name !== expected) {
+        return { error: "slot_changed", actual: currentItem?.name };
     }
     const transferred = p.pushItems(target, slot, amount);
-    if (transferred === 0) {
-        return { error: "transfer_failed" };
-    }
+    if (transferred === 0) return { error: "transfer_failed" };
     return { transferred };
 }, { error: "disconnected" });
-
-if ("error" in result) {
-    // Handle specific error...
-}
 ```
 
-**Why no automatic retry:**
-- `pushItems()` is not idempotent - retry could transfer items twice
-- Loop-based system naturally retries on next iteration with fresh state
-- Caller has full control over reconnect timing
+### Adding New Machine Types
+
+1. Create new `Scheduler` implementation in `lib/scheduler/` (or reuse existing)
+2. Create new app in `apps/my-system/` with `Task` + config types
+3. Add machine configs and register task in `entries/config.ts` + `entries/main.ts`
+4. Optionally add dashboard widgets
+
+### Error Forwarding
+
+When delegating to functions that return `Result<A>` but you need `Result<B>`:
+```typescript
+import { forwardErr } from "@core/result";
+const result = someFunction();
+if (!result.ok) return forwardErr(result);
+```
+This is needed because `strict: false` in tsconfig prevents proper discriminated union narrowing.
 
 ## TSTL Specifics
 
 - Target: `CC-5.2` (ComputerCraft Lua)
 - Types: `@jackmacwindows/lua-types/cc-5.2`, `craftos-types`, `cc-types`
-- Bundle mode: All TS compiled into single `main.lua`
+- Bundle mode: All TS compiled into single `unearther.lua`
 
 ### Peripheral Types & @noSelf
 
-CC:Tweaked peripherals use **function-call syntax** (`.`) instead of method-call syntax (`:`).
-We use `@jackmacwindows/craftos-types` which provides properly annotated interfaces with `@noSelf`.
-
-**Why this matters:**
-- TSTL default for interface methods: `obj:method()` (passes `self` as first argument)
-- CC:Tweaked expects: `obj.method()` (no `self` parameter)
-- Without `@noSelf`: Runtime error `bad argument #1 (number expected, got table)`
-
-**Example of the problem:**
+CC:Tweaked peripherals use function-call syntax (`.`) not method-call syntax (`:`).
+Use global types from `craftos-types` (declared via tsconfig `types` array):
 ```typescript
-// If you define your own interface WITHOUT @noSelf:
-interface MyInventory {
-    getItemDetail(slot: number): ItemDetail;
-}
-// TSTL generates: inventory:getItemDetail(slot)
-// CC:Tweaked receives: getItemDetail(self, slot) -- WRONG!
-// Error: "bad argument #1 (number expected, got table)"
-```
-
-**Solution:** Use the global types from `craftos-types` (declared via tsconfig `types` array):
-```typescript
-// These types are globally available - no import needed!
+// Globally available - no import needed!
 // InventoryPeripheral, WiredModemPeripheral, MonitorPeripheral, WriteFileHandle
-
-function wrapInventory(name: string): InventoryPeripheral {
-    return peripheral.wrap(name) as InventoryPeripheral;
-}
 ```
 
-**Do NOT define custom peripheral interfaces in `src/types.ts`!**
-The `craftos-types` package uses `@noSelfInFile` annotation which tells TSTL to generate `.` calls.
-
-**Note:** These types are globally declared (via `declare class`), not module exports.
-You cannot import them - they are available automatically through the tsconfig `types` configuration.
+**Do NOT define custom peripheral interfaces!** The `craftos-types` package uses `@noSelfInFile` for correct Lua codegen.
