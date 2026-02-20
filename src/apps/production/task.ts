@@ -38,7 +38,6 @@ export class ProductionTask implements Task<ProductionConfig, ProductionState> {
             {
                 recipes: config.recipes,
                 stockTargets: config.stockTargets,
-                minInputReserve: config.minInputReserve,
                 transferAmount: config.transferAmount,
             },
             context.logger,
@@ -70,19 +69,22 @@ export class ProductionTask implements Task<ProductionConfig, ProductionState> {
         const operations = transfers.length;
 
         // Build machine status from orchestrator scan results
-        const machineStatus: Record<string, { isEmpty: boolean; lastMaterial?: string }> = {};
+        const machineStatus: ProductionState["machineStatus"] = {};
         if (runResult) {
             for (const ms of runResult.machineStates) {
                 machineStatus[ms.id] = {
                     isEmpty: ms.isEmpty,
-                    lastMaterial: state.machineStatus[ms.id]?.lastMaterial,
+                    currentItem: ms.currentItem,
+                    currentCount: ms.currentCount,
                 };
             }
-            // Update lastMaterial from transfers
+            // After transfer, override with transfer data (more accurate than pre-transfer scan)
             for (const transfer of transfers) {
                 const entry = machineStatus[transfer.machineId];
                 if (entry) {
-                    entry.lastMaterial = transfer.itemId;
+                    entry.isEmpty = false;
+                    entry.currentItem = transfer.itemId;
+                    entry.currentCount = transfer.itemsTransferred;
                 }
             }
         }

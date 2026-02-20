@@ -17,9 +17,6 @@ export interface ProductionConfig {
     /** Stock targets for output materials */
     stockTargets: StockTarget[];
 
-    /** Minimum input items to keep in reserve */
-    minInputReserve: number;
-
     /** Items per transfer */
     transferAmount: number;
 }
@@ -38,5 +35,9 @@ export interface ProductionState {
     lastProcessingTime: number;
 
     /** Status of each machine */
-    machineStatus: Record<string, { isEmpty: boolean; lastMaterial?: string }>;
+    machineStatus: Record<string, {
+        isEmpty: boolean;
+        currentItem?: string;
+        currentCount?: number;
+    }>;
 }

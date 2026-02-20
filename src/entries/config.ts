@@ -7,7 +7,7 @@ const STACK_SIZE = 64;
  *
  * Hardware setup:
  * - 1x Functional Storage Controller (central material source)
- * - 1x Processing Chest (shared hammer input, pipes distribute to hammers)
+ * - 5x Hammer input chests (chest_5 through chest_9, one per hammer)
  * - 2x Unearther input chests (archaeologist, geologist)
  * - 1x Monitor for status display
  */
@@ -42,10 +42,13 @@ export const CONFIG: AppConfig = {
     production: {
         enabled: true,
 
-        // Single machine representing the shared processing chest
-        // (pipes behind it distribute to multiple physical hammers)
+        // Each hammer has its own input chest
         machines: [
-            { id: "hammer_chain", type: "hammer", inputChest: "minecraft:chest_4" },
+            { id: "hammer_1", type: "hammer", inputChest: "minecraft:chest_5" },
+            { id: "hammer_2", type: "hammer", inputChest: "minecraft:chest_6" },
+            { id: "hammer_3", type: "hammer", inputChest: "minecraft:chest_7" },
+            { id: "hammer_4", type: "hammer", inputChest: "minecraft:chest_8" },
+            { id: "hammer_5", type: "hammer", inputChest: "minecraft:chest_9" },
         ],
 
         // Recipes: what each hammer type can process
@@ -60,14 +63,11 @@ export const CONFIG: AppConfig = {
 
         // What we want to produce and how urgently
         stockTargets: [
-            { itemId: "minecraft:gravel", targetCount: 128 * STACK_SIZE, weight: 1 },
-            { itemId: "minecraft:dirt", targetCount: 128 * STACK_SIZE, weight: 1 },
-            { itemId: "minecraft:sand", targetCount: 128 * STACK_SIZE, weight: 1 },
-            { itemId: "ftbstuff:dust", targetCount: 128 * STACK_SIZE, weight: 1 },
+            { itemId: "minecraft:gravel", targetCount: 128 * STACK_SIZE, weight: 1, minReserve: 5 * STACK_SIZE },
+            { itemId: "minecraft:dirt", targetCount: 128 * STACK_SIZE, weight: 1, minReserve: 5 * STACK_SIZE },
+            { itemId: "minecraft:sand", targetCount: 128 * STACK_SIZE, weight: 1, minReserve: 5 * STACK_SIZE },
+            { itemId: "ftbstuff:dust", targetCount: 128 * STACK_SIZE, weight: 1, minReserve: 5 * STACK_SIZE },
         ],
-
-        // Keep at least 2 stacks of input material in reserve
-        minInputReserve: 2 * STACK_SIZE,
 
         // Transfer 1 stack at a time
         transferAmount: STACK_SIZE,

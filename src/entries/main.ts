@@ -88,6 +88,7 @@ function main(): void {
                     name: target.itemId.split(":")[1] ?? target.itemId,
                     itemId: target.itemId,
                     minStock: target.targetCount,
+                    isProductionOutput: true,
                 });
                 seenItemIds.add(target.itemId);
             }
@@ -194,7 +195,7 @@ function main(): void {
             headerWidget!.update(cycleCount, startTime);
             stockWidget!.updateInventory(inventoryRes.value);
 
-            // Update production machine status from task state
+            // Update production machine status + stock production info
             const taskStates = taskRegistry.getTaskStates();
 
             if (productionMachineWidget && CONFIG.production.enabled) {
@@ -205,10 +206,50 @@ function main(): void {
                         return {
                             id: m.id,
                             isEmpty: status?.isEmpty ?? true,
-                            lastMaterial: status?.lastMaterial,
+                            currentItem: status?.currentItem,
+                            currentCount: status?.currentCount,
                         };
                     }),
                 );
+
+                // Aggregate "in production": for each machine with items, find recipe output
+                const inProduction = new Map<string, number>();
+                const inputToOutput = new Map<string, string>();
+                for (const recipes of Object.values(CONFIG.production.recipes)) {
+                    for (const recipe of recipes) {
+                        inputToOutput.set(recipe.input, recipe.output);
+                    }
+                }
+
+                if (prodState) {
+                    for (const [, status] of Object.entries(prodState.machineStatus)) {
+                        if (status.currentItem) {
+                            const outputItem = inputToOutput.get(status.currentItem);
+                            if (outputItem) {
+                                const existing = inProduction.get(outputItem) ?? 0;
+                                inProduction.set(outputItem, existing + (status.currentCount ?? 0));
+                            }
+                        }
+                    }
+                }
+
+                // Determine blocked outputs: input below minReserve
+                const blockedOutputs = new Set<string>();
+                for (const recipes of Object.values(CONFIG.production.recipes)) {
+                    for (const recipe of recipes) {
+                        const inputTarget = CONFIG.production.stockTargets.find(
+                            (t) => t.itemId === recipe.input,
+                        );
+                        const reserve = inputTarget?.minReserve ?? 0;
+                        const inputInfo = inventoryRes.value.get(recipe.input);
+                        const inputCount = inputInfo?.totalCount ?? 0;
+                        if (inputCount < reserve) {
+                            blockedOutputs.add(recipe.output);
+                        }
+                    }
+                }
+
+                stockWidget!.updateProductionStatus(inProduction, blockedOutputs);
             }
 
             if (distributionMachineWidget && CONFIG.distribution.enabled) {
@@ -219,7 +260,6 @@ function main(): void {
                         return {
                             id: m.id,
                             isEmpty: status?.isEmpty ?? true,
-                            lastMaterial: status?.lastMaterial,
                         };
                     }),
                 );

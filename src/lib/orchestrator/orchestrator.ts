@@ -2,7 +2,6 @@ import { Result, ok } from "@core/result";
 import { Logger } from "@core/logger";
 import { SafePeripheral } from "@core/safe-peripheral";
 import { getInventoryContents } from "@lib/inventory/scanner";
-import { isInventoryEmpty } from "@lib/inventory/scanner";
 import { executeTransfer } from "@lib/transfer/transfer";
 import { InventoryItemInfo } from "@lib/inventory/types";
 import {
@@ -117,14 +116,38 @@ export class Orchestrator {
             }
 
             chest.ensureConnected();
-            const emptyRes = isInventoryEmpty(chest);
-            const isEmpty = emptyRes.ok ? emptyRes.value : false;
+            const contentsRes = getInventoryContents(chest);
+
+            if (!contentsRes.ok) {
+                states.push({
+                    id: machine.id,
+                    type: machine.type,
+                    inputChest: machine.inputChest,
+                    isEmpty: false,
+                });
+                continue;
+            }
+
+            const contents = contentsRes.value;
+            let isEmpty = true;
+            let currentItem: string | undefined;
+            let currentCount = 0;
+
+            for (const [itemId, info] of contents) {
+                isEmpty = false;
+                if (info.totalCount > currentCount) {
+                    currentItem = itemId;
+                    currentCount = info.totalCount;
+                }
+            }
 
             states.push({
                 id: machine.id,
                 type: machine.type,
                 inputChest: machine.inputChest,
                 isEmpty,
+                currentItem: isEmpty ? undefined : currentItem,
+                currentCount: isEmpty ? undefined : currentCount,
             });
         }
 

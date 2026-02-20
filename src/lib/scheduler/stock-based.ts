@@ -22,6 +22,9 @@ export interface StockTarget {
     targetCount: number;
     /** Priority weight (higher = more important) */
     weight: number;
+    /** Minimum stock before this material can be consumed as input for the next chain step.
+     *  Defaults to 0 if not set (no reserve). */
+    minReserve?: number;
 }
 
 /**
@@ -32,8 +35,6 @@ export interface StockBasedSchedulerConfig {
     recipes: Record<string, RecipeDefinition[]>;
     /** Stock targets: what we want to produce */
     stockTargets: StockTarget[];
-    /** Minimum input items to keep in reserve */
-    minInputReserve: number;
     /** Items per transfer */
     transferAmount: number;
 }
@@ -106,7 +107,12 @@ export class StockBasedScheduler implements Scheduler {
                 const inputInfo = localInventory.get(recipe.input);
                 if (!inputInfo) continue;
 
-                const required = this.config.minInputReserve + this.config.transferAmount;
+                // Check per-material minReserve (0 if not set, e.g. for Cobblestone)
+                const inputTarget = this.config.stockTargets.find(
+                    (t) => t.itemId === recipe.input,
+                );
+                const reserve = inputTarget?.minReserve ?? 0;
+                const required = reserve + this.config.transferAmount;
                 if (inputInfo.totalCount < required) continue;
 
                 // Find a slot with enough items, fallback to first slot

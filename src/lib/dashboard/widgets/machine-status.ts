@@ -10,12 +10,14 @@ export interface MachineDisplayStatus {
     id: string;
     /** Whether the machine's input is empty */
     isEmpty: boolean;
-    /** Last material assigned (optional) */
-    lastMaterial?: string;
+    /** Item currently in the chest (undefined if empty) */
+    currentItem?: string;
+    /** Count of items currently in the chest */
+    currentCount?: number;
 }
 
 /**
- * Machine status widget showing machine states (EMPTY/FULL).
+ * Machine status widget showing machine states with chest contents.
  */
 export class MachineStatusWidget implements DashboardWidget {
     id: string;
@@ -46,18 +48,24 @@ export class MachineStatusWidget implements DashboardWidget {
 
             if (machine.isEmpty) {
                 monitor.setTextColor(colors.yellow);
-                const suffix = machine.lastMaterial ? `  (last: ${machine.lastMaterial})` : "";
-                monitor.write(`${this.padRight(machine.id, 20)} EMPTY${suffix}`);
+                monitor.write(`${this.padRight(machine.id, 20)} EMPTY`);
             } else {
                 monitor.setTextColor(colors.green);
-                const suffix = machine.lastMaterial ? `  (last: ${machine.lastMaterial})` : "";
-                monitor.write(`${this.padRight(machine.id, 20)} FULL${suffix}`);
+                const itemName = this.extractShortName(machine.currentItem ?? "unknown");
+                const countStr = machine.currentCount ? `${machine.currentCount}x ` : "";
+                monitor.write(`${this.padRight(machine.id, 20)} ${countStr}${itemName}`);
             }
             y++;
         }
 
         y++;
         return y;
+    }
+
+    /** Extract short name from item ID: "minecraft:cobblestone" -> "cobblestone" */
+    private extractShortName(itemId: string): string {
+        const parts = itemId.split(":");
+        return parts[1] ?? itemId;
     }
 
     private padRight(s: string, width: number): string {

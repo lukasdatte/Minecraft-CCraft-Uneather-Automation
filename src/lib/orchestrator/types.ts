@@ -24,6 +24,10 @@ export interface MachineState {
     inputChest: string;
     /** Whether the input chest is empty (machine needs refill) */
     isEmpty: boolean;
+    /** Minecraft item ID currently in the chest (undefined if empty) */
+    currentItem?: string;
+    /** Count of items currently in the chest */
+    currentCount?: number;
 }
 
 /**

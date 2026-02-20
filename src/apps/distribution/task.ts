@@ -76,11 +76,8 @@ export class DistributionTask implements Task<DistributionConfig, DistributionSt
 
             // Update isEmpty from real orchestrator scan results
             for (const ms of runResult.machineStates) {
-                const existing = newMachineStatus[ms.id];
                 newMachineStatus[ms.id] = {
                     isEmpty: ms.isEmpty,
-                    lastMaterial: existing?.lastMaterial,
-                    lastTransferTime: existing?.lastTransferTime,
                 };
             }
 
@@ -89,8 +86,6 @@ export class DistributionTask implements Task<DistributionConfig, DistributionSt
                 transferCount++;
                 newMachineStatus[transfer.machineId] = {
                     isEmpty: false,
-                    lastMaterial: transfer.itemId,
-                    lastTransferTime: os.epoch("utc"),
                 };
             }
         }
