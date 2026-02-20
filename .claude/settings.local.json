@@ -13,7 +13,12 @@
       "Bash(dir \"%USERPROFILE%\\\\.claude\" /b)",
       "Bash(npm run build:*)",
       "Bash(ls:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "WebFetch(domain:tweaked.cc)",
+      "Bash(findstr:*)",
+      "Bash(grep:*)",
+      "Bash(dir \"C:\\\\Drive lukas@dattenberger.com\\\\DEV\\\\WebStorm\\\\Minecraft-CCraft-Uneather\" /b)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

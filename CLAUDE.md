@@ -11,7 +11,7 @@ CC:Tweaked computer-based distributor that compiles TypeScript to Lua using Type
 The system includes an automated material processing chain for hammer-based transformation:
 
 ```
-Cobblestone → Dirt → Gravel → Sand → Dust
+Cobblestone → Gravel → Dirt → Sand → Dust
 ```
 
 **How it works:**
@@ -54,7 +54,7 @@ Output: `dist/main.lua` (bundled entry point for CC:Tweaked).
 - `scanner.ts` - Scans unearthers and material source via wired modem
 - `scheduler.ts` - Weighted material selection for distribution
 - `transfer.ts` - Item transfer operations to unearthers
-- `processing.ts` - Material processing chain (Cobblestone→Dirt→Gravel→Sand→Dust)
+- `processing.ts` - Material processing chain (Cobblestone→Gravel→Dirt→Sand→Dust)
 
 ### Registry (`src/registry/`)
 - `peripheral.ts` - Peripheral validation and wrapping (modem, inventories, monitor)

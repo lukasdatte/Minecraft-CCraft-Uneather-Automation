@@ -7,7 +7,7 @@ import { AppConfig, STACK_SIZE } from "./types";
  * - Global peripherals (modem, material source, monitor)
  * - System settings (scan interval, log level)
  * - Task-specific configurations:
- *   - Hammering: Material processing chain (Cobblestone → Dirt → ...)
+ *   - Hammering: Material processing chain (Cobblestone → Gravel → Dirt → Sand → Dust)
  *   - Unearthing: Material distribution to unearthers
  */
 export const CONFIG: AppConfig = {
@@ -26,10 +26,10 @@ export const CONFIG: AppConfig = {
             type: "inventory",
         },
         // Optional: Status monitor for display
-        // monitor: {
-        //   name: "monitor_0",
-        //   type: "monitor",
-        // },
+        monitor: {
+            name: "monitor_0",
+            type: "monitor",
+        },
     },
 
     // ============================================================
@@ -65,10 +65,11 @@ export const CONFIG: AppConfig = {
             maxOutputStock: 128 * STACK_SIZE,
 
             // Processing chain: input item ID → output item ID
+            // Cobblestone → Gravel → Dirt → Sand → Dust
             chain: {
-                "minecraft:cobblestone": "minecraft:dirt",
-                "minecraft:dirt": "minecraft:gravel",
-                "minecraft:gravel": "minecraft:sand",
+                "minecraft:cobblestone": "minecraft:gravel",
+                "minecraft:gravel": "minecraft:dirt",
+                "minecraft:dirt": "minecraft:sand",
                 "minecraft:sand": "ftbstuff:dust",
             },
         },

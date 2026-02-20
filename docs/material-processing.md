@@ -58,7 +58,7 @@ Das System verwendet **eine gemeinsame Verarbeitungskette** mit einem Processing
 ### Hauptkette
 
 ```
-Cobblestone → Dirt → Gravel → Sand → Dust
+Cobblestone → Gravel → Dirt → Sand → Dust
 ```
 
 Jede Stufe wird durch einen Hammer verarbeitet. Die Kette ist konfigurierbar.
@@ -132,7 +132,7 @@ Zusätzlich zum Standard-Setup (siehe [system.md](./system.md)) benötigt das Pr
 3. **Computer** scannt das Basisinventar und prüft Schwellwerte
 4. Wenn Bedingungen erfüllt: Computer transferiert 1 Stack zur **Processing Chest**
 5. **Pipes** verteilen das Material auf verfügbare **Hämmer**
-6. Hämmer verarbeiten das Material (Cobblestone → Dirt, etc.)
+6. Hämmer verarbeiten das Material (Cobblestone → Gravel, etc.)
 7. **Pipes** transportieren das Ergebnis zurück ins **Basisinventar**
 8. Kreislauf beginnt von vorne
 
@@ -162,10 +162,10 @@ processing: {
 
     // Verarbeitungskette: Input → Output
     chain: {
-        "minecraft:cobblestone": "minecraft:dirt",
-        "minecraft:dirt": "minecraft:gravel",
-        "minecraft:gravel": "minecraft:sand",
-        "minecraft:sand": "exnihilo:dust",
+        "minecraft:cobblestone": "minecraft:gravel",
+        "minecraft:gravel": "minecraft:dirt",
+        "minecraft:dirt": "minecraft:sand",
+        "minecraft:sand": "ftbstuff:dust",
     },
 }
 ```
@@ -234,13 +234,13 @@ Konfiguration:
 Berechnung:
   benötigt = minInputReserve + STACK_SIZE = 128 + 64 = 192 Items
 
-Beispiel Cobblestone → Dirt:
+Beispiel Cobblestone → Gravel:
   - Cobblestone im Lager: 250
-  - Dirt im Lager: 100
+  - Gravel im Lager: 100
 
   Prüfung:
   - 250 >= 192? ✓ JA (genug Cobblestone)
-  - 100 < 256? ✓ JA (Dirt unter Maximum)
+  - 100 < 256? ✓ JA (Gravel unter Maximum)
 
   → Transfer von 64 Cobblestone zur Processing Chest
 ```
@@ -403,10 +403,10 @@ processing: {
     minInputReserve: 2 * STACK_SIZE,   // 128 Items Reserve
     maxOutputStock: 4 * STACK_SIZE,    // Max 256 Items
     chain: {
-        "minecraft:cobblestone": "minecraft:dirt",
-        "minecraft:dirt": "minecraft:gravel",
-        "minecraft:gravel": "minecraft:sand",
-        "minecraft:sand": "exnihilo:dust",
+        "minecraft:cobblestone": "minecraft:gravel",
+        "minecraft:gravel": "minecraft:dirt",
+        "minecraft:dirt": "minecraft:sand",
+        "minecraft:sand": "ftbstuff:dust",
     },
 }
 ```
@@ -419,7 +419,7 @@ processing: {
     minInputReserve: 3 * STACK_SIZE,   // 192 Items Reserve
     maxOutputStock: 10 * STACK_SIZE,   // Max 640 Items
     chain: {
-        "minecraft:cobblestone": "minecraft:dirt",
+        "minecraft:cobblestone": "minecraft:gravel",
     },
 }
 ```

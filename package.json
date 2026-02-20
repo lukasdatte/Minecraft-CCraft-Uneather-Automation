@@ -9,6 +9,8 @@
     "typecheck": "npx tsc --noEmit",
     "lint": "eslint . && npm run typecheck",
     "lint:fix": "eslint . --fix && npm run typecheck",
+    "predeploy": "npm run build",
+    "deploy": "copy dist\\main.lua \"%LOCALAPPDATA%\\.ftba\\instances\\ftb stoneblock 4 (5)\\saves\\My World\\computercraft\\computer\\0\\startup.lua\"",
     "prepare": "husky"
   },
   "devDependencies": {

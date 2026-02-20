@@ -24,7 +24,7 @@ export interface ProcessingPhaseConfig {
 }
 
 /**
- * Engine for material processing (hammer chain: Cobblestone → Dirt → Gravel → Sand → Dust).
+ * Engine for material processing (hammer chain: Cobblestone → Gravel → Dirt → Sand → Dust).
  */
 export class ProcessingEngine {
     constructor(

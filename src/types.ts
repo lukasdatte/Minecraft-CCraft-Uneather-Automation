@@ -144,7 +144,7 @@ export interface ProcessingResult {
 
 /**
  * Configuration for the Hammering Task.
- * Controls material processing (Cobblestone → Dirt → ...).
+ * Controls material processing (Cobblestone → Gravel → Dirt → Sand → Dust).
  */
 export interface HammeringConfig {
     /** Task enabled? */

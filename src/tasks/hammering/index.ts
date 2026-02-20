@@ -7,7 +7,7 @@ import { Scanner } from "../../engine/scanner";
 /**
  * HammeringTask - Processes materials through the hammer chain.
  *
- * Transforms materials: Cobblestone → Dirt → Gravel → Sand → Dust
+ * Transforms materials: Cobblestone → Gravel → Dirt → Sand → Dust
  * Transfers items to a processing chest for external pipe handling.
  */
 export class HammeringTask implements Task<HammeringConfig, HammeringState> {
