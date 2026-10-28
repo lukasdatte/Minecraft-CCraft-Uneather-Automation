@@ -70,8 +70,11 @@ export class StockTableWidget implements DashboardWidget {
 
             monitor.setCursorPos(1, y);
 
+            let statusText = "";
             if (entry.isProductionOutput) {
-                monitor.setTextColor(this.getProductionColor(entry, count));
+                const status = this.getProductionStatus(entry, count);
+                monitor.setTextColor(status.color);
+                statusText = status.label;
             } else {
                 monitor.setTextColor(count < entry.minStock ? colors.red : colors.white);
             }
@@ -79,7 +82,8 @@ export class StockTableWidget implements DashboardWidget {
             const name = this.shortenName(entry.name, 16);
             const countStr = this.formatNumber(count);
             const minStr = this.formatNumber(entry.minStock);
-            monitor.write(`${name} ${countStr}  (min: ${minStr})`);
+            const suffix = statusText ? ` ${statusText}` : "";
+            monitor.write(`${name} ${countStr}  (min: ${minStr})${suffix}`);
             y++;
         }
 
@@ -87,23 +91,19 @@ export class StockTableWidget implements DashboardWidget {
         return y;
     }
 
-    /** Determine color for a production output item */
-    private getProductionColor(entry: StockEntry, count: number): number {
-        // Green: target reached
+    /** Determine color and status label for a production output item */
+    private getProductionStatus(entry: StockEntry, count: number): { color: number; label: string } {
         if (count >= entry.minStock) {
-            return colors.green;
+            return { color: colors.green, label: "DONE" };
         }
-        // Yellow: items in hammer chests being processed into this material
         const producing = this.inProduction.get(entry.itemId) ?? 0;
         if (producing > 0) {
-            return colors.yellow;
+            return { color: colors.yellow, label: "PROD" };
         }
-        // Red: input material below craftingMinimum
         if (this.blockedOutputs.has(entry.itemId)) {
-            return colors.red;
+            return { color: colors.red, label: "BLOCKED" };
         }
-        // White: idle, could produce
-        return colors.white;
+        return { color: colors.white, label: "IDLE" };
     }
 
     private formatNumber(n: number): string {

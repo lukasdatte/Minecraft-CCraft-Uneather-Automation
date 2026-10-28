@@ -111,7 +111,7 @@ function main(): void {
         if (CONFIG.production.enabled) {
             productionMachineWidget = new MachineStatusWidget(
                 "production-machines",
-                "Production",
+                "Hammer",
                 20,
             );
             dashboard.addWidget(productionMachineWidget);
@@ -121,7 +121,7 @@ function main(): void {
         if (CONFIG.distribution.enabled) {
             distributionMachineWidget = new MachineStatusWidget(
                 "distribution-machines",
-                "Distribution",
+                "Unearther",
                 30,
             );
             dashboard.addWidget(distributionMachineWidget);
@@ -260,6 +260,8 @@ function main(): void {
                         return {
                             id: m.id,
                             isEmpty: status?.isEmpty ?? true,
+                            currentItem: status?.currentItem,
+                            currentCount: status?.currentCount,
                         };
                     }),
                 );

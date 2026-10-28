@@ -74,18 +74,22 @@ export class DistributionTask implements Task<DistributionConfig, DistributionSt
         if (result.ok) {
             const runResult = result.value;
 
-            // Update isEmpty from real orchestrator scan results
+            // Update from orchestrator scan results (includes chest contents)
             for (const ms of runResult.machineStates) {
                 newMachineStatus[ms.id] = {
                     isEmpty: ms.isEmpty,
+                    currentItem: ms.currentItem,
+                    currentCount: ms.currentCount,
                 };
             }
 
-            // Update from transfers
+            // After transfer, override with transfer data
             for (const transfer of runResult.transfers) {
                 transferCount++;
                 newMachineStatus[transfer.machineId] = {
                     isEmpty: false,
+                    currentItem: transfer.itemId,
+                    currentCount: transfer.itemsTransferred,
                 };
             }
         }

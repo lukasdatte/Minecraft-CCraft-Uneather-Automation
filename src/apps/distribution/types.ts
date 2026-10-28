@@ -28,6 +28,8 @@ export interface DistributionState {
     /** Status of each machine */
     machineStatus: Record<string, {
         isEmpty: boolean;
+        currentItem?: string;
+        currentCount?: number;
     }>;
 
     /** Total transfers since start */
